@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0b0f14;
+  color: #e6edf3;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+@layer components {
+  .card {
+    @apply bg-[#141b24] rounded-2xl border border-white/5 shadow-lg;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary { @apply btn bg-emerald-500 hover:bg-emerald-400 text-black; }
+  .btn-ghost { @apply btn bg-white/5 hover:bg-white/10 text-white; }
+  .btn-danger { @apply btn bg-red-500/90 hover:bg-red-500 text-white; }
+  .btn-warn { @apply btn bg-amber-500 hover:bg-amber-400 text-black; }
+  .input {
+    @apply w-full rounded-xl bg-[#0f1620] border border-white/10 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/20 transition;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop { animation: pop 0.18s ease-out; }
+
+@keyframes slideup {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slideup { animation: slideup 0.25s ease-out; }
+
+@keyframes flash {
+  0% { background-color: rgba(16,185,129,0.25); }
+  100% { background-color: transparent; }
+}
+.animate-flash { animation: flash 1.2s ease-out; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Hide the "Made with Bolt" badge injected by the platform — it overlaps
+   the bottom action bar on mobile and blocks interaction. */
+a[href*="bolt.new"],
+div[class*="bolt"],
+iframe[src*="bolt"] {
+  display: none !important;
+  pointer-events: none !important;
+}

@@ -1,0 +1,244 @@
+import { supabase } from './supabase';
+import type { Session, Product, TableConfig, Order, OrderItem, OrderStatus } from './types';
+import { addPending, loadPending, removePending } from './offline';
+import { uid, vakjesFor } from './utils';
+
+// ---- Sessions ----
+
+export async function createSession(eventName: string): Promise<Session> {
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  const { data, error } = await supabase
+    .from('klj_sessions')
+    .insert({ code, pin, event_name: eventName, vakje_value: 0.5, next_order_num: 1 })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Session;
+}
+
+export async function getSessionByCode(code: string): Promise<Session | null> {
+  const { data, error } = await supabase
+    .from('klj_sessions')
+    .select('*')
+    .eq('code', code)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Session | null;
+}
+
+export async function updateSession(id: string, patch: Partial<Session>): Promise<void> {
+  const { error } = await supabase.from('klj_sessions').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+// ---- Products ----
+
+export async function fetchProducts(sessionId: string): Promise<Product[]> {
+  const { data, error } = await supabase
+    .from('klj_products')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data || []) as Product[];
+}
+
+export async function upsertProduct(p: Partial<Product> & { session_id: string }): Promise<Product> {
+  if (p.id) {
+    const { data, error } = await supabase.from('klj_products').update(p).eq('id', p.id).select().single();
+    if (error) throw error;
+    return data as Product;
+  }
+  const { data, error } = await supabase
+    .from('klj_products')
+    .insert({ ...p, sort_order: p.sort_order ?? 0 })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Product;
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  const { error } = await supabase.from('klj_products').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function reorderProducts(ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id, i) =>
+    supabase.from('klj_products').update({ sort_order: i }).eq('id', id),
+  ));
+}
+
+// ---- Tables ----
+
+export async function fetchTables(sessionId: string): Promise<TableConfig[]> {
+  const { data, error } = await supabase
+    .from('klj_tables')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+  return (data || []) as TableConfig[];
+}
+
+export async function upsertTable(t: Partial<TableConfig> & { session_id: string }): Promise<TableConfig> {
+  if (t.id) {
+    const { data, error } = await supabase.from('klj_tables').update(t).eq('id', t.id).select().single();
+    if (error) throw error;
+    return data as TableConfig;
+  }
+  const { data, error } = await supabase
+    .from('klj_tables')
+    .insert({ ...t, sort_order: t.sort_order ?? 0 })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as TableConfig;
+}
+
+export async function deleteTable(id: string): Promise<void> {
+  const { error } = await supabase.from('klj_tables').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ---- Orders ----
+
+export async function fetchOrders(sessionId: string): Promise<Order[]> {
+  const { data, error } = await supabase
+    .from('klj_orders')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []) as Order[];
+}
+
+export async function createOrder(
+  sessionId: string,
+  tableName: string,
+  waiter: string,
+  items: OrderItem[],
+  vakjeValue: number,
+  note?: string,
+): Promise<Order> {
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const vakjes = items.reduce((s, i) => s + vakjesFor(i.price, vakjeValue) * i.qty, 0);
+
+  // Offline path: queue locally, sync later.
+  if (!navigator.onLine) {
+    addPending({
+      local_id: uid(),
+      session_id: sessionId,
+      table_name: tableName,
+      waiter,
+      items,
+      total,
+      vakjes,
+      note: note || null,
+      created_at: new Date().toISOString(),
+    });
+    // Return a pseudo-order so the UI can show confirmation immediately.
+    return {
+      id: 'local-' + uid(),
+      session_id: sessionId,
+      num: 0,
+      table_name: tableName,
+      waiter,
+      items,
+      total,
+      vakjes,
+      note: note || null,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as Order;
+  }
+
+  // Claim the next order number atomically via RPC.
+  const { data: num, error: numErr } = await supabase.rpc('klj_claim_order_num', { p_session_id: sessionId });
+  if (numErr) throw numErr;
+
+  const { data, error } = await supabase
+    .from('klj_orders')
+    .insert({
+      session_id: sessionId,
+      num,
+      table_name: tableName,
+      waiter,
+      items,
+      total,
+      vakjes,
+      note: note || null,
+      status: 'pending',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('klj_order_events').insert({
+    order_id: (data as Order).id,
+    session_id: sessionId,
+    event_type: 'created',
+    waiter,
+    detail: `Bestelling #${num} aangemaakt (${items.length} regels)`,
+  });
+
+  return data as Order;
+}
+
+export async function updateOrderStatus(id: string, status: OrderStatus, reason?: string): Promise<void> {
+  const patch: any = { status, updated_at: new Date().toISOString() };
+  if (reason) patch.cancel_reason = reason;
+  if (status === 'done') patch.completed_at = new Date().toISOString();
+  if (status !== 'done') patch.completed_at = null;
+  if (status === 'completed') patch.picked_up_at = new Date().toISOString();
+  if (status !== 'completed') patch.picked_up_at = null;
+  const { error } = await supabase.from('klj_orders').update(patch).eq('id', id);
+  if (error) throw error;
+
+  await supabase.from('klj_order_events').insert({
+    order_id: id,
+    session_id: (await supabase.from('klj_orders').select('session_id').eq('id', id).maybeSingle()).data?.session_id,
+    event_type: status,
+    detail: reason || `Status gewijzigd naar ${status}`,
+  });
+}
+
+export async function updateOrder(id: string, patch: Partial<Order>): Promise<void> {
+  const { error } = await supabase
+    .from('klj_orders')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ---- Sync pending orders ----
+
+export async function syncPendingOrders(): Promise<number> {
+  const pending = loadPending();
+  let synced = 0;
+  for (const p of pending) {
+    try {
+      const { data: num, error: numErr } = await supabase.rpc('klj_claim_order_num', { p_session_id: p.session_id });
+      if (numErr) throw numErr;
+      const { error } = await supabase.from('klj_orders').insert({
+        session_id: p.session_id,
+        num,
+        table_name: p.table_name,
+        waiter: p.waiter,
+        items: p.items,
+        total: p.total,
+        vakjes: p.vakjes,
+        note: p.note,
+        status: 'pending',
+      });
+      if (error) throw error;
+      removePending(p.local_id);
+      synced++;
+    } catch (e) {
+      // keep retrying remaining orders; a single bad row no longer blocks the rest
+    }
+  }
+  return synced;
+}
