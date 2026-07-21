@@ -17,8 +17,17 @@ export function waitMinutes(iso: string): number {
 }
 
 // Wachttijd in minuten, bevroren op het tijdstip dat de bestelling klaar werd gemarkeerd.
-export function waitMinutesFrozen(order: { created_at: string; completed_at?: string | null }): number {
-  const end = order.completed_at ? new Date(order.completed_at).getTime() : Date.now();
+// De timer stopt zodra de keuken de bestelling afwerkt (done), en blijft bevroren
+// voor ober-afgewerkt (completed) en geannuleerd (cancelled).
+export function waitMinutesFrozen(order: { created_at: string; completed_at?: string | null; updated_at?: string; status?: string }): number {
+  let end: number;
+  if (order.completed_at) {
+    end = new Date(order.completed_at).getTime();
+  } else if (order.status === 'cancelled' && order.updated_at) {
+    end = new Date(order.updated_at).getTime();
+  } else {
+    end = Date.now();
+  }
   return Math.floor((end - new Date(order.created_at).getTime()) / 60000);
 }
 

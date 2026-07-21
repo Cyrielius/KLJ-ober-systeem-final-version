@@ -188,12 +188,13 @@ export async function createOrder(
 }
 
 export async function updateOrderStatus(id: string, status: OrderStatus, reason?: string): Promise<void> {
-  const patch: any = { status, updated_at: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const patch: any = { status, updated_at: now };
   if (reason) patch.cancel_reason = reason;
-  if (status === 'done') patch.completed_at = new Date().toISOString();
-  if (status !== 'done') patch.completed_at = null;
-  if (status === 'completed') patch.picked_up_at = new Date().toISOString();
-  if (status !== 'completed') patch.picked_up_at = null;
+  // Freeze the kitchen timer when the kitchen marks an order done — keep it frozen
+  // through the ober-afgewerkt and geannuleerd stages so the wait time stops counting.
+  if (status === 'done') patch.completed_at = now;
+  if (status === 'completed') patch.picked_up_at = now;
   const { error } = await supabase.from('klj_orders').update(patch).eq('id', id);
   if (error) throw error;
 

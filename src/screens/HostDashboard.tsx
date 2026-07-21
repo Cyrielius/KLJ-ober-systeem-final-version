@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createRoot as ReactDOMCreateRoot } from 'react-dom/client';
-import { LogOut, ListOrdered, UtensilsCrossed, BarChart3, Settings, Plus, Eye, EyeOff, Volume2, VolumeX, Download, Upload, ArrowUp, ArrowDown, Users, CheckCircle2, Smartphone, Flame } from 'lucide-react';
+import { LogOut, ListOrdered, UtensilsCrossed, BarChart3, Settings, Plus, Eye, EyeOff, Volume2, VolumeX, Download, Upload, ArrowUp, ArrowDown, Users, CheckCircle2, Smartphone, Flame, Printer } from 'lucide-react';
 import type { Session, Product, TableConfig, Order, OrderItem } from '../lib/types';
 import { fmtEUR, waitMinutes } from '../lib/utils';
 import { fetchProducts, fetchTables, fetchOrders, updateOrderStatus, updateOrder, upsertProduct, deleteProduct, reorderProducts, upsertTable, deleteTable, updateSession } from '../lib/db';
@@ -9,6 +9,7 @@ import { Stats } from '../components/Stats';
 import { Modal } from '../components/Modal';
 import { Receipt } from '../components/Receipt';
 import { QRCode } from '../components/QRCode';
+import qrcode from 'qrcode-generator';
 import { EditOrderModal, CancelModal, DetailsModal } from '../components/OrderModals';
 import { ProductModal, TableModal, SettingsModal, UsersModal } from '../components/AdminModals';
 import { useToast } from '../components/Toast';
@@ -250,24 +251,24 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
         {tab === 'orders' && (
           <div className="flex flex-col gap-5">
             <section>
-              <h2 className="text-white/60 text-sm uppercase tracking-wider mb-2">Open — {sortedOrders.pending.length}</h2>
+              <h2 className="text-emerald-400/80 text-sm uppercase tracking-wider mb-2">Keuken ontvangen — {sortedOrders.pending.length}</h2>
               <div className="grid md:grid-cols-2 gap-3">
                 {sortedOrders.pending.map((o) => <OrderCard key={o.id} order={o} timers={timers} onDone={handleDone} onEdit={setEditOrder} onCancel={setCancelOrder} onPrint={printReceipt} onDetails={setDetailsOrder} />)}
               </div>
               {sortedOrders.pending.length === 0 && <p className="text-white/30 text-sm">Geen open bestellingen.</p>}
             </section>
             <section>
-              <h2 className="text-sky-400/80 text-sm uppercase tracking-wider mb-2">Klaar — {sortedOrders.done.length}</h2>
+              <h2 className="text-sky-400/80 text-sm uppercase tracking-wider mb-2">Keuken afgewerkt — {sortedOrders.done.length}</h2>
               <div className="grid md:grid-cols-2 gap-3">
                 {sortedOrders.done.slice(0, 20).map((o) => <OrderCard key={o.id} order={o} timers={timers} onComplete={handleComplete} onPrint={printReceipt} onDetails={setDetailsOrder} />)}
               </div>
-              {sortedOrders.done.length === 0 && <p className="text-white/30 text-sm">Niets klaar.</p>}
+              {sortedOrders.done.length === 0 && <p className="text-white/30 text-sm">Niets afgewerkt.</p>}
             </section>
             {sortedOrders.completed.length > 0 && (
               <section>
-                <h2 className="text-white/60 text-sm uppercase tracking-wider mb-2">Afgerond — {sortedOrders.completed.length}</h2>
+                <h2 className="text-white/60 text-sm uppercase tracking-wider mb-2">Volledig afgewerkt — {sortedOrders.completed.length}</h2>
                 <div className="grid md:grid-cols-2 gap-3">
-                  {sortedOrders.completed.slice(0, 20).map((o) => <OrderCard key={o.id} order={o} onPrint={printReceipt} onDetails={setDetailsOrder} compact />)}
+                  {sortedOrders.completed.slice(0, 20).map((o) => <OrderCard key={o.id} order={o} onPrint={printReceipt} onDetails={setDetailsOrder} />)}
                 </div>
               </section>
             )}
@@ -275,7 +276,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
               <section>
                 <h2 className="text-white/60 text-sm uppercase tracking-wider mb-2">Geannuleerd — {sortedOrders.cancelled.length}</h2>
                 <div className="grid md:grid-cols-2 gap-3">
-                  {sortedOrders.cancelled.slice(0, 10).map((o) => <OrderCard key={o.id} order={o} onDetails={setDetailsOrder} compact />)}
+                  {sortedOrders.cancelled.slice(0, 10).map((o) => <OrderCard key={o.id} order={o} onDetails={setDetailsOrder} />)}
                 </div>
               </section>
             )}
@@ -357,6 +358,9 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
             <QRCode value={`${joinUrl}&role=kitchen`} size={180} />
             <p className="text-white/60 text-sm text-center">Scan om als keuken te verbinden met <span className="font-mono">{currentSession.code}</span>.</p>
           </div>
+          <button onClick={() => printQrCodes(currentSession.event_name, currentSession.code, `${joinUrl}&role=waiter`, `${joinUrl}&role=kitchen`)} className="btn-primary px-4 py-2.5 flex items-center gap-2 text-sm font-semibold">
+            <Printer size={16} /> QR-codes afdrukken
+          </button>
         </div>
       </Modal>
     </div>
@@ -401,5 +405,47 @@ function supabaseRealtime(sessionId: string, onChange: () => void) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'klj_sessions', filter: `id=eq.${sessionId}` }, onChange)
     .subscribe();
   return ch;
+}
+
+function printQrCodes(eventName: string, code: string, waiterUrl: string, kitchenUrl: string) {
+  const w = window.open('', '_blank', 'width=600,height=800');
+  if (!w) return;
+  const qr = (url: string) => {
+    try {
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      const count = qr.getModuleCount();
+      const cell = 6;
+      const dim = cell * count;
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${dim}" height="${dim}" viewBox="0 0 ${dim} ${dim}">`;
+      svg += `<rect width="${dim}" height="${dim}" fill="#ffffff"/>`;
+      for (let r = 0; r < count; r++) for (let c = 0; c < count; c++) if (qr.isDark(r, c)) svg += `<rect x="${c * cell}" y="${r * cell}" width="${cell}" height="${cell}" fill="#000000"/>`;
+      svg += '</svg>';
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    } catch { return ''; }
+  };
+  w.document.write(`<!DOCTYPE html><html><head><title>QR-codes — ${eventName}</title><style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,sans-serif}
+    body{padding:40px;color:#0b0f14}
+    h1{font-size:28px;margin-bottom:8px}
+    .sub{font-size:16px;color:#555;margin-bottom:32px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+    .card{border:2px solid #e5e7eb;border-radius:16px;padding:24px;text-align:center}
+    .card h2{font-size:20px;margin-bottom:16px}
+    .card img{width:200px;height:200px}
+    .card p{margin-top:12px;font-size:14px;color:#555}
+    .code{font-family:monospace;font-size:18px;font-weight:bold;margin-top:4px}
+    @media print{body{padding:20px}.grid{gap:24px}}
+  </style></head><body>
+    <h1>${eventName}</h1>
+    <p class="sub">Sessiecode: <span class="code">${code}</span> — scan een QR-code om te verbinden</p>
+    <div class="grid">
+      <div class="card"><h2>Ober</h2><img src="${qr(waiterUrl)}" alt="Ober QR"/><p>Scan om bestellingen te plaatsen</p></div>
+      <div class="card"><h2>Keuken</h2><img src="${qr(kitchenUrl)}" alt="Keuken QR"/><p>Scan om bestellingen te zien</p></div>
+    </div>
+    <script>window.onload=()=>{setTimeout(()=>window.print(),300)}</script>
+  </body></html>`);
+  w.document.close();
 }
 
