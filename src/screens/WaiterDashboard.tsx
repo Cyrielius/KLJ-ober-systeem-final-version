@@ -68,7 +68,7 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
     setView('main');
     refresh();
   }
-  async function handleComplete(o: Order) { await updateOrderStatus(o.id, 'completed'); push(`#${o.num} afgerond`); refresh(); }
+  async function handleComplete(o: Order) { await updateOrderStatus(o.id, 'completed'); push(`#${o.num} volledig afgewerkt`); refresh(); }
   async function handleCancel(o: Order, reason: string) { await updateOrderStatus(o.id, 'cancelled', reason); setCancelOrder(null); push(`#${o.num} geannuleerd`, 'info'); refresh(); }
   async function handleEditSave(items: OrderItem[], note?: string) {
     if (!editOrder) return;
@@ -123,7 +123,7 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
             {/* Klaar — bovenaan, direct af te halen */}
             <section>
               <h2 className="text-sky-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-sky-400" /> Klaar ({readyOrders.length})
+                <span className="w-2 h-2 rounded-full bg-sky-400" /> Keuken afgewerkt ({readyOrders.length})
               </h2>
               <div className="flex flex-col gap-3">
                 {readyOrders.map((o) => (
@@ -136,7 +136,7 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
             {/* Ontvangen */}
             <section>
               <h2 className="text-emerald-400 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Ontvangen ({receivedOrders.length})
+                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Keuken ontvangen ({receivedOrders.length})
               </h2>
               <div className="flex flex-col gap-3">
                 {receivedOrders.map((o) => (
@@ -149,7 +149,7 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
             {/* Afgerond */}
             <section>
               <h2 className="text-white/50 text-sm uppercase tracking-wider mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-white/30" /> Afgerond ({completedOrders.length})
+                <span className="w-2 h-2 rounded-full bg-white/30" /> Volledig afgewerkt ({completedOrders.length})
               </h2>
               <div className="flex flex-col gap-3">
                 {completedOrders.slice(0, 15).map((o) => (

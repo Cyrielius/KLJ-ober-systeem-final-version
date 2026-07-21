@@ -78,7 +78,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
 
   async function handleDone(o: Order) {
     await updateOrderStatus(o.id, 'done');
-    push(`Bestelling #${o.num} klaar`, 'success');
+    push(`Bestelling #${o.num} keuken afgewerkt`, 'success');
   }
 
   return (
@@ -91,7 +91,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
           </div>
           <div className="flex items-center gap-2">
             {pending.length > 0 && <span className="badge bg-emerald-500/15 text-emerald-400"><Bell size={12} /> {pending.length} nieuw</span>}
-            {ready.length > 0 && <span className="badge bg-sky-500/15 text-sky-400">{ready.length} klaar</span>}
+            {ready.length > 0 && <span className="badge bg-sky-500/15 text-sky-400">{ready.length} keuken afgewerkt</span>}
             <button onClick={onLeave} className="btn-ghost px-3 py-2 text-red-400 flex items-center gap-2"><LogOut size={18} /> Sluiten</button>
           </div>
         </div>
@@ -107,7 +107,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
         {/* Tabs */}
         <div className="max-w-6xl mx-auto px-4 flex gap-1">
           <TabBtn active={tab === 'active'} onClick={() => setTab('active')} label={`Actief (${pending.length + ready.length})`} />
-          <TabBtn active={tab === 'completed'} onClick={() => setTab('completed')} label={`Afgerond (${completed.length})`} />
+          <TabBtn active={tab === 'completed'} onClick={() => setTab('completed')} label={`Volledig afgewerkt (${completed.length})`} />
         </div>
       </header>
 
@@ -115,7 +115,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
         {tab === 'active' && (
           <>
             <section>
-              <h2 className="text-emerald-400 text-sm uppercase tracking-wider mb-3">Te maken ({pending.length})</h2>
+              <h2 className="text-emerald-400 text-sm uppercase tracking-wider mb-3">Keuken ontvangen ({pending.length})</h2>
               {pending.length === 0 ? <p className="text-white/30 text-sm">Geen bestellingen wachten.</p> : (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {pending.map((o) => (
@@ -127,7 +127,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
 
             {ready.length > 0 && (
               <section>
-                <h2 className="text-sky-400 text-sm uppercase tracking-wider mb-3">Klaar — wacht op ober ({ready.length})</h2>
+                <h2 className="text-sky-400 text-sm uppercase tracking-wider mb-3">Keuken afgewerkt — wacht op ober ({ready.length})</h2>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {ready.map((o) => (
                     <KitchenCard key={o.id} order={o} expanded={!!expanded[o.id]} onToggle={() => setExpanded((s) => ({ ...s, [o.id]: !s[o.id] }))} />
@@ -140,7 +140,7 @@ export function KitchenScreen({ session, onLeave }: Props) {
 
         {tab === 'completed' && (
           <section>
-            <h2 className="text-white/50 text-sm uppercase tracking-wider mb-3">Afgerond vandaag ({completed.length})</h2>
+            <h2 className="text-white/50 text-sm uppercase tracking-wider mb-3">Volledig afgewerkt ({completed.length})</h2>
             {completed.length === 0 ? <p className="text-white/30 text-sm">Nog niets afgerond.</p> : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 {completed.slice(0, 60).map((o) => (
@@ -239,7 +239,7 @@ function KitchenCard({ order, expanded, onToggle, onDone }: { order: Order; expa
 
           {onDone && order.status === 'pending' && (
             <button onClick={() => onDone(order)} className="btn-primary py-3 font-semibold flex items-center justify-center gap-2">
-              <CheckCircle2 size={18} /> Klaar
+              <CheckCircle2 size={18} /> Keuken afgewerkt
             </button>
           )}
           {isReady && (
