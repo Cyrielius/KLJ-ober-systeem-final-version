@@ -1,18 +1,19 @@
 import { useMemo } from 'react';
 import type { Order } from '../lib/types';
 import { fmtEUR } from '../lib/utils';
-import { Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { Download, FileText, FileSpreadsheet, Printer } from 'lucide-react';
 
 export function Stats({ orders }: { orders: Order[] }) {
   const s = useMemo(() => {
-    const done = orders.filter((o) => o.status === 'done');
+    const done = orders.filter((o) => o.status === 'done' || o.status === 'completed');
     const pending = orders.filter((o) => o.status === 'pending');
     const cancelled = orders.filter((o) => o.status === 'cancelled');
-    const revenue = done.reduce((sum, o) => sum + Number(o.total), 0);
-    const vakjes = done.reduce((sum, o) => sum + o.vakjes, 0);
-    const avg = done.length ? revenue / done.length : 0;
+    const completed = orders.filter((o) => o.status === 'completed');
+    const revenue = completed.reduce((sum, o) => sum + Number(o.total), 0);
+    const vakjes = completed.reduce((sum, o) => sum + o.vakjes, 0);
+    const avg = completed.length ? revenue / completed.length : 0;
 
-    const waitTimes = done.map((o) => (new Date(o.updated_at).getTime() - new Date(o.created_at).getTime()) / 60000);
+    const waitTimes = done.map((o) => (new Date(o.completed_at || o.updated_at).getTime() - new Date(o.created_at).getTime()) / 60000);
     const avgWait = waitTimes.length ? waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length : 0;
 
     const productCount: Record<string, number> = {};
@@ -25,27 +26,28 @@ export function Stats({ orders }: { orders: Order[] }) {
     const topProducts = allProducts.slice(0, 5);
 
     const tableCount: Record<string, number> = {};
-    done.forEach((o) => { tableCount[o.table_name] = (tableCount[o.table_name] || 0) + Number(o.total); });
+    completed.forEach((o) => { tableCount[o.table_name] = (tableCount[o.table_name] || 0) + Number(o.total); });
     const topTables = Object.entries(tableCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
     const waiterCount: Record<string, number> = {};
-    done.forEach((o) => { waiterCount[o.waiter] = (waiterCount[o.waiter] || 0) + Number(o.total); });
+    completed.forEach((o) => { waiterCount[o.waiter] = (waiterCount[o.waiter] || 0) + Number(o.total); });
     const topWaiters = Object.entries(waiterCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
     const hourly: Record<string, number> = {};
-    done.forEach((o) => {
+    completed.forEach((o) => {
       const h = new Date(o.created_at).getHours();
       hourly[h] = (hourly[h] || 0) + Number(o.total);
     });
     const hourlyRows = Object.entries(hourly).sort((a, b) => Number(a[0]) - Number(b[0]));
     const maxHour = Math.max(1, ...hourlyRows.map((r) => r[1]));
 
-    return { done: done.length, pending: pending.length, cancelled: cancelled.length, revenue, vakjes, avg, avgWait, topProducts, topTables, topWaiters, hourlyRows, maxHour, allProducts, productRevenue };
+    return { done: done.length, pending: pending.length, cancelled: cancelled.length, completed: completed.length, revenue, vakjes, avg, avgWait, topProducts, topTables, topWaiters, hourlyRows, maxHour, allProducts, productRevenue };
   }, [orders]);
 
   const cards = [
-    { label: 'Open', value: s.pending, color: 'text-emerald-400' },
-    { label: 'Klaar', value: s.done, color: 'text-sky-400' },
+    { label: 'Keuken ontvangen', value: s.pending, color: 'text-emerald-400' },
+    { label: 'Keuken afgewerkt', value: s.done, color: 'text-sky-400' },
+    { label: 'Volledig afgewerkt', value: s.completed, color: 'text-white' },
     { label: 'Geannuleerd', value: s.cancelled, color: 'text-red-400' },
     { label: 'Omzet', value: fmtEUR(s.revenue), color: 'text-emerald-400' },
     { label: 'Vakjes', value: s.vakjes, color: 'text-violet-300' },
@@ -61,6 +63,7 @@ export function Stats({ orders }: { orders: Order[] }) {
           <button onClick={() => exportCSV(orders)} className="btn-ghost px-3 py-2 text-sm flex items-center gap-2"><Download size={16} /> CSV</button>
           <button onClick={() => exportExcel(orders)} className="btn-ghost px-3 py-2 text-sm flex items-center gap-2"><FileSpreadsheet size={16} /> Excel</button>
           <button onClick={() => exportPDF(orders)} className="btn-ghost px-3 py-2 text-sm flex items-center gap-2"><FileText size={16} /> PDF</button>
+          <button onClick={() => printProductSummary(orders)} className="btn-ghost px-3 py-2 text-sm flex items-center gap-2"><Printer size={16} /> Producten</button>
         </div>
       </div>
 
@@ -125,17 +128,27 @@ function TopList({ title, rows, fmt }: { title: string; rows: [string, number][]
   );
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Keuken ontvangen',
+  done: 'Keuken afgewerkt',
+  completed: 'Volledig afgewerkt',
+  cancelled: 'Geannuleerd',
+};
+
 function orderRows(orders: Order[]) {
-  return orders.filter((o) => o.status === 'done').map((o) => ({
-    num: o.num,
-    table: o.table_name,
-    waiter: o.waiter,
-    status: o.status,
-    total: Number(o.total),
-    vakjes: o.vakjes,
-    items: o.items.map((i) => `${i.qty}× ${i.name}`).join('; '),
-    created: new Date(o.created_at).toLocaleString('nl-BE'),
-  }));
+  return orders
+    .filter((o) => o.status === 'done' || o.status === 'completed')
+    .sort((a, b) => a.num - b.num)
+    .map((o) => ({
+      num: o.num,
+      table: o.table_name,
+      waiter: o.waiter,
+      status: STATUS_LABELS[o.status] || o.status,
+      total: Number(o.total),
+      vakjes: o.vakjes,
+      items: o.items.map((i) => `${i.qty}× ${i.name}`).join('; '),
+      created: new Date(o.created_at).toLocaleString('nl-BE'),
+    }));
 }
 
 function exportCSV(orders: Order[]) {
@@ -162,6 +175,29 @@ function exportPDF(orders: Order[]) {
   w.document.close();
   w.focus();
   setTimeout(() => w.print(), 300);
+}
+
+function printProductSummary(orders: Order[]) {
+  const rows = orderRows(orders);
+  const counts: Record<string, { qty: number; revenue: number }> = {};
+  rows.forEach((r) => {
+    r.items.split('; ').forEach((entry) => {
+      const m = entry.match(/^(\d+)×\s(.+)$/);
+      if (!m) return;
+      const qty = Number(m[1]);
+      const name = m[2];
+      if (!counts[name]) counts[name] = { qty: 0, revenue: 0 };
+      counts[name].qty += qty;
+    });
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1].qty - a[1].qty);
+  const totalQty = sorted.reduce((s, [, v]) => s + v.qty, 0);
+  const w = window.open('', '_blank', 'width=600,height=800');
+  if (!w) return;
+  const body = sorted.map(([name, v], i) => `<tr><td>${i + 1}</td><td>${name}</td><td style="text-align:center;font-weight:bold">${v.qty}×</td></tr>`).join('');
+  w.document.write(`<!doctype html><html><head><title>KLJ Verkochte Producten</title><style>body{font-family:system-ui;padding:24px}h1{margin-bottom:4px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f0f0f0}.total{margin-top:16px;font-size:16px;font-weight:bold}</style></head><body><h1>KLJ Bestelsysteem — Verkochte Producten</h1><p>${sorted.length} producten · ${totalQty} stuks totaal · ${new Date().toLocaleString('nl-BE')}</p><table><thead><tr><th>#</th><th>Product</th><th style="text-align:center">Aantal</th></tr></thead><tbody>${body}</tbody></table><p class="total">Totaal: ${totalQty} stuks</p><script>window.onload=()=>{setTimeout(()=>window.print(),300)}</script></body></html>`);
+  w.document.close();
+  w.focus();
 }
 
 function download(blob: Blob, ext: string) {
