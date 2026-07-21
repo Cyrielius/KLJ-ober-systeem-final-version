@@ -25,16 +25,16 @@ interface Props {
 export function OrderCard({ order, onDone, onComplete, onEdit, onCancel, onPrint, compact, timers, defaultExpanded }: Props) {
   const t = timers ?? { yellow: 5, orange: 8, red: 10, critical: 15 };
   const [expanded, setExpanded] = useState(!!defaultExpanded);
-  const frozen = (order.status === 'done' || order.status === 'completed') && order.completed_at;
+  const frozen = order.status !== 'pending' && order.completed_at;
   const min = waitMinutesFrozen(order);
 
   const statusBadge =
     order.status === 'pending'
-      ? <span className="badge bg-emerald-500/15 text-emerald-400">Ontvangen</span>
+      ? <span className="badge bg-emerald-500/15 text-emerald-400">Keuken ontvangen</span>
       : order.status === 'done'
-      ? <span className="badge bg-sky-500/15 text-sky-400">Klaar</span>
+      ? <span className="badge bg-sky-500/15 text-sky-400">Keuken afgewerkt</span>
       : order.status === 'completed'
-      ? <span className="badge bg-white/10 text-white/50">Afgerond</span>
+      ? <span className="badge bg-white/10 text-white/50">Volledig afgewerkt</span>
       : <span className="badge bg-red-500/15 text-red-400">Geannuleerd</span>;
 
   const colorClass =
@@ -65,7 +65,7 @@ export function OrderCard({ order, onDone, onComplete, onEdit, onCancel, onPrint
         </div>
       </button>
 
-      {expanded && !compact && (
+      {expanded && (
         <div className="px-4 pb-3 flex flex-col gap-1">
           {order.items.map((it, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
@@ -91,8 +91,8 @@ export function OrderCard({ order, onDone, onComplete, onEdit, onCancel, onPrint
             {onPrint && <button onClick={() => onPrint(order)} className="btn-ghost px-3 py-1.5 text-sm"><Printer size={14} /></button>}
             {onEdit && order.status === 'pending' && <button onClick={() => onEdit(order)} className="btn-ghost px-3 py-1.5 text-sm">Aanpassen</button>}
             {onCancel && (order.status === 'pending' || order.status === 'done') && <button onClick={() => onCancel(order)} className="btn-warn px-3 py-1.5 text-sm"><XCircle size={14} /> Annuleren</button>}
-            {onDone && order.status === 'pending' && <button onClick={() => onDone(order)} className="btn-primary px-3 py-1.5 text-sm"><CheckCircle2 size={14} /> Klaar</button>}
-            {onComplete && order.status === 'done' && <button onClick={() => onComplete(order)} className="btn-primary px-3 py-1.5 text-sm"><CheckCircle2 size={14} /> Afgerond</button>}
+            {onDone && order.status === 'pending' && <button onClick={() => onDone(order)} className="btn-primary px-3 py-1.5 text-sm"><CheckCircle2 size={14} /> Keuken afgewerkt</button>}
+            {onComplete && order.status === 'done' && <button onClick={() => onComplete(order)} className="btn-primary px-3 py-1.5 text-sm"><CheckCircle2 size={14} /> Volledig afgewerkt</button>}
           </div>
         </div>
       )}
