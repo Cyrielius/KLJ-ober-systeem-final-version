@@ -1,3 +1,5 @@
+import type { OrderStatus, WorkflowMode, SoundType } from './types';
+
 export function fmtEUR(n: number): string {
   return new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR' }).format(n);
 }
@@ -22,6 +24,10 @@ export function waitMinutesFrozen(order: { created_at: string; completed_at?: st
   return Math.floor((end - new Date(order.created_at).getTime()) / 60000);
 }
 
+export function waitSeconds(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+}
+
 export function genCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -38,4 +44,139 @@ export function vakjesFor(price: number, vakjeValue: number, override?: number |
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+// Status labels based on workflow mode
+export function statusLabel(status: OrderStatus, mode: WorkflowMode): string {
+  if (mode === '1-step') {
+    switch (status) {
+      case 'pending': return 'Verzonden';
+      case 'done': return 'Gemaakt';
+      case 'completed': return 'Afgerond';
+      case 'cancelled': return 'Geannuleerd';
+    }
+  }
+  // 2-step mode
+  switch (status) {
+    case 'pending': return 'Keuken ontvangen';
+    case 'done': return 'Keuken klaar';
+    case 'completed': return 'Ober klaar';
+    case 'cancelled': return 'Geannuleerd';
+  }
+}
+
+// Next status forward in the workflow
+export function nextStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus | null {
+  if (mode === '1-step') {
+    if (status === 'pending') return 'done';
+    if (status === 'done') return 'completed';
+    return null;
+  }
+  // 2-step
+  if (status === 'pending') return 'done';
+  if (status === 'done') return 'completed';
+  return null;
+}
+
+// Previous status (revert one step)
+export function prevStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus | null {
+  if (mode === '1-step') {
+    if (status === 'completed') return 'done';
+    if (status === 'done') return 'pending';
+    return null;
+  }
+  // 2-step
+  if (status === 'completed') return 'done';
+  if (status === 'done') return 'pending';
+  return null;
+}
+
+// Action button label for advancing status
+export function advanceLabel(status: OrderStatus, mode: WorkflowMode): string {
+  if (mode === '1-step') {
+    if (status === 'pending') return 'Bestelling gemaakt';
+    if (status === 'done') return 'Ober klaar';
+    return '';
+  }
+  // 2-step
+  if (status === 'pending') return 'Keuken klaar';
+  if (status === 'done') return 'Ober klaar';
+  return '';
+}
+
+// Revert button label
+export function revertLabel(status: OrderStatus, mode: WorkflowMode): string {
+  if (mode === '1-step') {
+    if (status === 'done') return 'Terug naar Verzonden';
+    if (status === 'completed') return 'Terug naar Gemaakt';
+    return '';
+  }
+  // 2-step
+  if (status === 'done') return 'Terug naar Keuken ontvangen';
+  if (status === 'completed') return 'Terug naar Keuken klaar';
+  return '';
+}
+
+// Play a notification sound based on session config
+export function playNotificationSound(soundType: SoundType, soundUrl?: string | null) {
+  if (soundType === 'custom' && soundUrl) {
+    try {
+      const audio = new Audio(soundUrl);
+      audio.play().catch(() => {});
+      return;
+    } catch {}
+  }
+
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const now = ctx.currentTime;
+
+    if (soundType === 'chime') {
+      // Three ascending notes
+      [523, 659, 784].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freq;
+        o.type = 'sine';
+        const start = now + i * 0.15;
+        g.gain.setValueAtTime(0, start);
+        g.gain.linearRampToValueAtTime(0.15, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+        o.start(start); o.stop(start + 0.3);
+      });
+    } else if (soundType === 'ding') {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 1320;
+      o.type = 'sine';
+      g.gain.setValueAtTime(0.2, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+      o.start(now); o.stop(now + 0.8);
+    } else if (soundType === 'alert') {
+      // Two-tone alert
+      [880, 660].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freq;
+        o.type = 'square';
+        const start = now + i * 0.2;
+        g.gain.setValueAtTime(0.12, start);
+        g.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+        o.start(start); o.stop(start + 0.18);
+      });
+    } else {
+      // Default beep
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880;
+      o.type = 'sine';
+      g.gain.setValueAtTime(0.15, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      o.start(now); o.stop(now + 0.4);
+    }
+  } catch {}
 }

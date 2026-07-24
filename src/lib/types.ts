@@ -1,4 +1,7 @@
 export type OrderStatus = 'pending' | 'done' | 'completed' | 'cancelled';
+export type WorkflowMode = '1-step' | '2-step';
+export type ProductAvailability = 'available' | 'unavailable' | 'hidden';
+export type SoundType = 'beep' | 'chime' | 'ding' | 'alert' | 'custom';
 
 export interface Session {
   id: string;
@@ -12,6 +15,9 @@ export interface Session {
   timer_red: number;
   timer_critical: number;
   auto_print: boolean;
+  workflow_mode: WorkflowMode;
+  sound_type: SoundType;
+  sound_url?: string | null;
   created_at: string;
 }
 
@@ -23,6 +29,7 @@ export interface Product {
   emoji: string;
   category: string;
   available: boolean;
+  availability: ProductAvailability;
   sort_order: number;
   photo_url?: string | null;
   vakjes_override?: number | null;
@@ -61,6 +68,7 @@ export interface Order {
   cancel_reason?: string | null;
   completed_at?: string | null;
   picked_up_at?: string | null;
+  made_at?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -3,7 +3,7 @@ import { fmtEUR, fmtDateTime, vakjesFor } from '../lib/utils';
 
 export function Receipt({ order, vakjeValue }: { order: Order; vakjeValue: number }) {
   return (
-    <div className="bg-white text-black rounded-xl p-5 font-mono text-sm mx-auto max-w-[300px]" id="receipt">
+    <div className="bg-white text-black rounded-md p-4 font-mono text-sm mx-auto max-w-[300px]" id="receipt">
       <div className="text-center mb-2">
         <p className="font-bold text-base">KLJ Bestelsysteem</p>
         <p className="text-xs">{fmtDateTime(order.created_at)}</p>

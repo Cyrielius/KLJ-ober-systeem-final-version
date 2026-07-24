@@ -1,33 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Minus, Plus, Send, Loader2, Search } from 'lucide-react';
-import type { Product, TableConfig, OrderItem } from '../lib/types';
+import { ArrowLeft, Minus, Plus, Send, Loader2, Search, ChevronDown } from 'lucide-react';
+import type { Product, OrderItem, ProductAvailability } from '../lib/types';
 import { fmtEUR, vakjesFor } from '../lib/utils';
 
 interface Props {
   products: Product[];
-  tables: TableConfig[];
   vakjeValue: number;
   waiter: string;
   onBack: () => void;
   onSubmit: (table: string, items: OrderItem[], note?: string) => Promise<void>;
 }
 
-interface CartLine extends OrderItem {}
-
-export function NewOrder({ products, tables, vakjeValue, waiter, onBack, onSubmit }: Props) {
+export function NewOrder({ products, vakjeValue, waiter, onBack, onSubmit }: Props) {
   const [table, setTable] = useState('');
-  const [cart, setCart] = useState<Record<string, CartLine>>({});
+  const [cart, setCart] = useState<Record<string, OrderItem>>({});
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [query, setQuery] = useState('');
+  const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
   const cartBarRef = useRef<HTMLDivElement>(null);
   const [cartBarHeight, setCartBarHeight] = useState(0);
 
-  const available = products.filter((p) => p.available);
+  // Only show available products (unavailable and hidden are excluded from ordering)
+  const orderable = products.filter((p) => p.availability === 'available' || (!p.availability && p.available));
   const filtered = query.trim()
-    ? available.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()) || p.category.toLowerCase().includes(query.trim().toLowerCase()))
-    : available;
+    ? orderable.filter((p) =>
+        p.name.toLowerCase().includes(query.trim().toLowerCase()) ||
+        p.category.toLowerCase().includes(query.trim().toLowerCase()))
+    : orderable;
   const categories = [...new Set(filtered.map((p) => p.category))].sort();
   const cartLines = Object.values(cart);
   const total = cartLines.reduce((s, l) => s + l.price * l.qty, 0);
@@ -51,6 +52,10 @@ export function NewOrder({ products, tables, vakjeValue, waiter, onBack, onSubmi
     setCart((c) => c[id] ? { ...c, [id]: { ...c[id], note } } : c);
   }
 
+  function toggleCat(cat: string) {
+    setCollapsedCats((s) => ({ ...s, [cat]: !s[cat] }));
+  }
+
   useEffect(() => {
     const el = cartBarRef.current;
     if (!el) return;
@@ -61,92 +66,126 @@ export function NewOrder({ products, tables, vakjeValue, waiter, onBack, onSubmi
   }, [cartLines.length]);
 
   async function submit() {
-    if (!table) return setErr('Kies eerst een tafel.');
+    if (!table.trim()) return setErr('Vul een tafelnummer in (alleen cijfers).');
     if (cartLines.length === 0) return setErr('Voeg minstens één product toe.');
     setBusy(true); setErr('');
     try {
-      await onSubmit(table, cartLines, note.trim() || undefined);
+      await onSubmit(table.trim(), cartLines, note.trim() || undefined);
     } catch (e: any) { setErr(e.message || 'Verzenden mislukt.'); }
     finally { setBusy(false); }
   }
 
   return (
     <div className="min-h-full flex flex-col">
-      <div className="sticky top-0 z-20 bg-[#0b0f14]/95 backdrop-blur border-b border-white/5 p-4 flex items-center gap-3">
-        <button onClick={onBack} className="btn-ghost px-3 py-2"><ArrowLeft size={18} /></button>
-        <h2 className="text-xl font-bold">Nieuwe bestelling</h2>
-        <span className="ml-auto text-sm text-white/40">Ober: {waiter}</span>
+      <div className="sticky top-0 z-20 bg-[#0a0d12]/95 backdrop-blur border-b border-white/[0.06] px-3 py-2.5 flex items-center gap-2">
+        <button onClick={onBack} className="btn-ghost px-2 py-1.5"><ArrowLeft size={16} /></button>
+        <h2 className="text-base font-bold text-white">Nieuwe bestelling</h2>
+        <span className="ml-auto text-xs text-white/40">Ober: {waiter}</span>
       </div>
 
-      {/* Table input */}
-      <div className="p-4">
-        <p className="text-sm text-white/60 mb-2">1. Tafelnummer</p>
+      {/* Table input — numbers only */}
+      <div className="p-3 border-b border-white/[0.04]">
+        <label className="label">1. Tafelnummer</label>
         <input
-          className="input text-lg max-w-xs"
-          placeholder="bv. 5"
+          className="input text-lg max-w-[160px] mt-1 font-mono"
+          placeholder="bv. 12"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={table}
-          onChange={(e) => setTable(e.target.value)}
+          onChange={(e) => setTable(e.target.value.replace(/[^0-9]/g, ''))}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLElement).blur()}
+          autoFocus
         />
       </div>
 
       {/* Products */}
-      <div className="px-4" style={{ paddingBottom: cartBarHeight + 16 }}>
-        <p className="text-sm text-white/60 mb-2">2. Kies producten</p>
-        <div className="relative mb-3">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+      <div className="px-3 pt-3" style={{ paddingBottom: cartBarHeight + 16 }}>
+        <label className="label">2. Producten</label>
+        <div className="relative mt-1 mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input className="input pl-9" placeholder="Product zoeken..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
+
         {filtered.length === 0 && <p className="text-white/30 text-sm">Geen producten gevonden.</p>}
-        {categories.map((cat) => (
-          <div key={cat} className="mb-4">
-            <p className="text-white/40 text-xs uppercase tracking-wider mb-2">{cat}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filtered.filter((p) => p.category === cat).map((p) => {
-                const line = cart[p.id];
-                return (
-                  <button key={p.id} onClick={() => add(p)}
-                    className={`card p-3 text-left hover:border-emerald-400/40 transition active:scale-[0.97] relative ${line ? 'border-emerald-400/50' : ''}`}>
-                    {p.photo_url ? <img src={p.photo_url} alt="" className="w-full h-20 rounded-lg object-cover mb-1" onError={(e) => (e.currentTarget.style.display = 'none')} /> : <div className="text-3xl mb-1">{p.emoji}</div>}
-                    <p className="font-semibold text-sm leading-tight">{p.name}</p>
-                    <p className="text-emerald-400 text-sm">{fmtEUR(Number(p.price))}</p>
-                    <p className="text-white/30 text-xs">{vakjesFor(Number(p.price), vakjeValue, p.vakjes_override)} vakjes</p>
-                    {line && <span className="absolute top-2 right-2 bg-emerald-500 text-black rounded-full w-6 h-6 flex items-center justify-text-sm font-bold">{line.qty}</span>}
-                  </button>
-                );
-              })}
+
+        {categories.map((cat) => {
+          const isCollapsed = collapsedCats[cat];
+          const catProducts = filtered.filter((p) => p.category === cat);
+          return (
+            <div key={cat} className="mb-3">
+              <button
+                onClick={() => toggleCat(cat)}
+                className="w-full flex items-center gap-2 py-1.5 px-2 hover:bg-white/[0.03] rounded-md transition"
+              >
+                <ChevronDown size={14} className={`text-white/40 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                <span className="section-title">{cat}</span>
+                <span className="text-white/30 text-xs">({catProducts.length})</span>
+              </button>
+              {!isCollapsed && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-1">
+                  {catProducts.map((p) => {
+                    const line = cart[p.id];
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => add(p)}
+                        className={`card p-2.5 text-left transition active:scale-[0.97] relative ${line ? 'border-emerald-500/40' : 'hover:border-white/[0.12]'}`}
+                      >
+                        {p.photo_url ? (
+                          <img src={p.photo_url} alt="" className="w-full h-16 rounded object-cover mb-1" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                        ) : (
+                          <div className="text-2xl mb-1">{p.emoji}</div>
+                        )}
+                        <p className="font-semibold text-sm text-white leading-tight">{p.name}</p>
+                        <p className="text-emerald-400 text-xs">{fmtEUR(Number(p.price))}</p>
+                        <p className="text-white/30 text-[10px]">{vakjesFor(Number(p.price), vakjeValue, p.vakjes_override)} vakjes</p>
+                        {line && (
+                          <span className="absolute top-1.5 right-1.5 bg-emerald-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                            {line.qty}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Cart bar */}
       {cartLines.length > 0 && (
-        <div ref={cartBarRef} className="fixed bottom-0 left-0 right-0 z-30 bg-[#141b24] border-t border-white/10 p-4">
+        <div ref={cartBarRef} className="fixed bottom-0 left-0 right-0 z-30 bg-[#131820] border-t border-white/[0.08] p-3">
           <div className="max-w-3xl mx-auto">
-            <div className="flex flex-col gap-2 mb-3 max-h-32 overflow-y-auto">
+            <div className="flex flex-col gap-1.5 mb-2 max-h-32 overflow-y-auto">
               {cartLines.map((l) => (
                 <div key={l.product_id} className="flex items-center gap-2 text-sm">
-                  <span className="bg-white/10 rounded px-2 py-0.5 font-mono">{l.qty}×</span>
-                  <span className="flex-1">{l.emoji} {l.name}</span>
-                  <input className="input py-1 px-2 text-xs flex-none w-32" placeholder="opmerking" value={l.note || ''} onChange={(e) => setNoteLine(l.product_id, e.target.value)} />
-                  <button onClick={() => dec(l.product_id)} className="btn-ghost p-1.5"><Minus size={14} /></button>
-                  <button onClick={() => add(products.find((p) => p.id === l.product_id)!)} className="btn-ghost p-1.5"><Plus size={14} /></button>
+                  <span className="bg-white/[0.08] rounded px-1.5 py-0.5 font-mono text-xs font-bold">{l.qty}×</span>
+                  <span className="flex-1 text-white/90">{l.name}</span>
+                  <input
+                    className="input py-1 px-2 text-xs flex-none w-28"
+                    placeholder="opmerking"
+                    value={l.note || ''}
+                    onChange={(e) => setNoteLine(l.product_id, e.target.value)}
+                  />
+                  <button onClick={() => dec(l.product_id)} className="btn-ghost p-1"><Minus size={12} /></button>
+                  <button onClick={() => add(products.find((p) => p.id === l.product_id)!)} className="btn-ghost p-1"><Plus size={12} /></button>
                 </div>
               ))}
             </div>
-            <input className="input mb-3" placeholder="Algemene opmerking (bv. zonder ijs)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input mb-2 text-sm" placeholder="Algemene opmerking (bv. zonder ijs)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm">
-                <span className="text-white/60">Totaal: </span>
-                <span className="font-bold text-lg">{fmtEUR(total)}</span>
-                <span className="text-violet-300 ml-3">{vakjes} vakjes</span>
+                <span className="text-white/50">Totaal: </span>
+                <span className="font-bold text-base text-white">{fmtEUR(total)}</span>
+                <span className="text-violet-300 ml-2 text-xs">{vakjes} vakjes</span>
               </div>
-              <button onClick={submit} className="btn-primary px-6 py-3.5 text-base flex-1 sm:flex-none" disabled={busy}>
-                {busy ? <Loader2 className="animate-spin" /> : <><Send size={18} /> Verzenden</>}
+              <button onClick={submit} className="btn-primary px-5 py-2.5 text-sm flex-1 sm:flex-none" disabled={busy}>
+                {busy ? <Loader2 className="animate-spin" size={16} /> : <><Send size={16} /> Verzenden</>}
               </button>
             </div>
-            {err && <p className="text-red-400 text-sm mt-2">{err}</p>}
+            {err && <p className="text-red-400 text-xs mt-1.5">{err}</p>}
           </div>
         </div>
       )}

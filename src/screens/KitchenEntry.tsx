@@ -31,21 +31,23 @@ export function KitchenEntry({ onBack, onJoin }: Props) {
   }
 
   return (
-    <div className="min-h-full flex flex-col p-5 max-w-md mx-auto w-full">
-      <button onClick={onBack} className="btn-ghost px-3 py-2 self-start mb-6"><ArrowLeft size={18} /> Terug</button>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-xl bg-amber-500/15 flex items-center justify-center"><Flame className="text-amber-400" size={26} /></div>
-        <h2 className="text-2xl font-bold">Keuken aanmelden</h2>
+    <div className="min-h-full flex flex-col p-4 max-w-md mx-auto w-full">
+      <button onClick={onBack} className="btn-ghost px-2.5 py-1.5 self-start mb-4 text-sm"><ArrowLeft size={16} /> Terug</button>
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="w-10 h-10 rounded-md bg-amber-500/10 flex items-center justify-center"><Flame className="text-amber-400" size={20} /></div>
+        <h2 className="text-lg font-bold text-white">Keuken aanmelden</h2>
       </div>
-      <div className="flex flex-col gap-4">
-        <label className="text-sm text-white/60">Sessiecode</label>
-        <input className="input tracking-widest text-center text-lg" placeholder="000000" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && connect()} readOnly={!!initialCode} autoFocus={!initialCode} />
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="label">Sessiecode</label>
+          <input className="input tracking-widest text-center text-base mt-1" placeholder="000000" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && connect()} readOnly={!!initialCode} autoFocus={!initialCode} />
+        </div>
         {initialCode && <p className="text-emerald-400 text-xs">Sessiecode ingevuld via QR-code.</p>}
-        {err && <p className="text-red-400 text-sm">{err}</p>}
-        <button onClick={connect} className="btn-primary py-4 text-lg" disabled={busy}>
-          {busy ? <Loader2 className="animate-spin" /> : <><Flame size={20} /> Verbinden</>}
+        {err && <p className="text-red-400 text-xs">{err}</p>}
+        <button onClick={connect} className="btn-primary py-3 text-sm" disabled={busy}>
+          {busy ? <Loader2 className="animate-spin" size={16} /> : <><Flame size={16} /> Verbinden</>}
         </button>
-        <p className="text-white/30 text-xs">Scan de QR-code die de host toont, of typ de 6-cijferige sessiecode in.</p>
+        <p className="text-white/25 text-xs">Scan de QR-code die de host toont, of typ de 6-cijferige sessiecode in.</p>
       </div>
     </div>
   );

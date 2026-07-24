@@ -12,8 +12,8 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: #0b0f14;
-  color: #e6edf3;
+  background: #0a0d12;
+  color: #d1d5db;
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -24,47 +24,67 @@ body {
 
 @layer components {
   .card {
-    @apply bg-[#141b24] rounded-2xl border border-white/5 shadow-lg;
+    @apply bg-[#131820] rounded-lg border border-white/[0.06];
   }
+
+  .card-hover {
+    @apply card transition-colors hover:border-white/[0.12] hover:bg-[#181e27];
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none;
   }
-  .btn-primary { @apply btn bg-emerald-500 hover:bg-emerald-400 text-black; }
-  .btn-ghost { @apply btn bg-white/5 hover:bg-white/10 text-white; }
-  .btn-danger { @apply btn bg-red-500/90 hover:bg-red-500 text-white; }
-  .btn-warn { @apply btn bg-amber-500 hover:bg-amber-400 text-black; }
+  .btn-primary { @apply btn bg-emerald-600 hover:bg-emerald-500 text-white; }
+  .btn-ghost { @apply btn bg-white/[0.06] hover:bg-white/[0.1] text-white; }
+  .btn-danger { @apply btn bg-red-600 hover:bg-red-500 text-white; }
+  .btn-warn { @apply btn bg-amber-600 hover:bg-amber-500 text-white; }
+  .btn-sky { @apply btn bg-sky-600 hover:bg-sky-500 text-white; }
+
   .input {
-    @apply w-full rounded-xl bg-[#0f1620] border border-white/10 px-4 py-3 text-white placeholder-white/30 outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/20 transition;
+    @apply w-full rounded-md bg-[#0d1117] border border-white/[0.08] px-3 py-2.5 text-white placeholder-white/30 outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 transition text-sm;
   }
+
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    @apply inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold;
+  }
+
+  .label {
+    @apply text-xs text-white/50 font-medium;
+  }
+
+  .section-title {
+    @apply text-xs text-white/40 uppercase tracking-wider font-semibold;
   }
 }
 
 @keyframes pop {
-  0% { transform: scale(0.9); opacity: 0; }
+  0% { transform: scale(0.96); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
-.animate-pop { animation: pop 0.18s ease-out; }
+.animate-pop { animation: pop 0.14s ease-out; }
 
 @keyframes slideup {
-  from { transform: translateY(12px); opacity: 0; }
+  from { transform: translateY(10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-.animate-slideup { animation: slideup 0.25s ease-out; }
+.animate-slideup { animation: slideup 0.2s ease-out; }
 
 @keyframes flash {
-  0% { background-color: rgba(16,185,129,0.25); }
+  0% { background-color: rgba(16,185,129,0.2); }
   100% { background-color: transparent; }
 }
-.animate-flash { animation: flash 1.2s ease-out; }
+.animate-flash { animation: flash 1s ease-out; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
+@keyframes pulse-urgent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+  50% { box-shadow: 0 0 0 4px rgba(239,68,68,0); }
+}
+.animate-urgent { animation: pulse-urgent 1.5s ease-in-out infinite; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* Hide the "Made with Bolt" badge injected by the platform — it overlaps
-   the bottom action bar on mobile and blocks interaction. */
 a[href*="bolt.new"],
 div[class*="bolt"],
 iframe[src*="bolt"] {

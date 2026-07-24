@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Session, Product, TableConfig, Order, OrderItem, OrderStatus } from './types';
+import type { Session, Product, TableConfig, Order, OrderItem, OrderStatus, WorkflowMode, SoundType, ProductAvailability } from './types';
 import { addPending, loadPending, removePending } from './offline';
 import { uid, vakjesFor } from './utils';
 
@@ -10,7 +10,7 @@ export async function createSession(eventName: string): Promise<Session> {
   const pin = String(Math.floor(1000 + Math.random() * 9000));
   const { data, error } = await supabase
     .from('klj_sessions')
-    .insert({ code, pin, event_name: eventName, vakje_value: 0.5, next_order_num: 1 })
+    .insert({ code, pin, event_name: eventName, vakje_value: 0.5, next_order_num: 1, workflow_mode: '2-step', sound_type: 'beep' })
     .select()
     .single();
   if (error) throw error;
@@ -45,14 +45,18 @@ export async function fetchProducts(sessionId: string): Promise<Product[]> {
 }
 
 export async function upsertProduct(p: Partial<Product> & { session_id: string }): Promise<Product> {
+  const payload: any = { ...p };
+  if (p.availability) {
+    payload.available = p.availability === 'available';
+  }
   if (p.id) {
-    const { data, error } = await supabase.from('klj_products').update(p).eq('id', p.id).select().single();
+    const { data, error } = await supabase.from('klj_products').update(payload).eq('id', p.id).select().single();
     if (error) throw error;
     return data as Product;
   }
   const { data, error } = await supabase
     .from('klj_products')
-    .insert({ ...p, sort_order: p.sort_order ?? 0 })
+    .insert({ ...payload, sort_order: p.sort_order ?? 0 })
     .select()
     .single();
   if (error) throw error;
@@ -70,7 +74,7 @@ export async function reorderProducts(ids: string[]): Promise<void> {
   ));
 }
 
-// ---- Tables ----
+// ---- Tables (legacy, kept for backward compat) ----
 
 export async function fetchTables(sessionId: string): Promise<TableConfig[]> {
   const { data, error } = await supabase
@@ -138,7 +142,6 @@ export async function createOrder(
       note: note || null,
       created_at: new Date().toISOString(),
     });
-    // Return a pseudo-order so the UI can show confirmation immediately.
     return {
       id: 'local-' + uid(),
       session_id: sessionId,
@@ -187,19 +190,37 @@ export async function createOrder(
   return data as Order;
 }
 
-export async function updateOrderStatus(id: string, status: OrderStatus, reason?: string): Promise<void> {
-  const patch: any = { status, updated_at: new Date().toISOString() };
+export async function updateOrderStatus(
+  id: string,
+  status: OrderStatus,
+  reason?: string,
+  sessionId?: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const patch: any = { status, updated_at: now };
   if (reason) patch.cancel_reason = reason;
-  if (status === 'done') patch.completed_at = new Date().toISOString();
+  // completed_at tracks when kitchen marks done (2-step) or made (1-step)
+  if (status === 'done') patch.completed_at = now;
   if (status !== 'done') patch.completed_at = null;
-  if (status === 'completed') patch.picked_up_at = new Date().toISOString();
+  // picked_up_at tracks when waiter completes the order
+  if (status === 'completed') patch.picked_up_at = now;
   if (status !== 'completed') patch.picked_up_at = null;
+  // made_at tracks 1-step "Bestelling gemaakt"
+  if (status === 'done') patch.made_at = now;
+  if (status !== 'done') patch.made_at = null;
+
   const { error } = await supabase.from('klj_orders').update(patch).eq('id', id);
   if (error) throw error;
 
+  // Log event
+  let sid = sessionId;
+  if (!sid) {
+    const { data } = await supabase.from('klj_orders').select('session_id').eq('id', id).maybeSingle();
+    sid = data?.session_id;
+  }
   await supabase.from('klj_order_events').insert({
     order_id: id,
-    session_id: (await supabase.from('klj_orders').select('session_id').eq('id', id).maybeSingle()).data?.session_id,
+    session_id: sid,
     event_type: status,
     detail: reason || `Status gewijzigd naar ${status}`,
   });
@@ -236,8 +257,8 @@ export async function syncPendingOrders(): Promise<number> {
       if (error) throw error;
       removePending(p.local_id);
       synced++;
-    } catch (e) {
-      // keep retrying remaining orders; a single bad row no longer blocks the rest
+    } catch {
+      // keep retrying remaining orders
     }
   }
   return synced;

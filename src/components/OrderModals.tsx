@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Modal } from './Modal';
 import { Minus, Plus, Trash2, Loader2 } from 'lucide-react';
 import type { Order, OrderItem, Product } from '../lib/types';
@@ -42,38 +42,38 @@ export function EditOrderModal({ order, products, vakjeValue, onClose, onSave, o
 
   return (
     <Modal open onClose={onClose} title={`Bestelling #${order.num} aanpassen`} size="lg">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         <div>
-          <p className="text-sm text-white/60 mb-2">Producten</p>
-          <div className="flex flex-col gap-2">
+          <p className="label mb-1.5">Producten</p>
+          <div className="flex flex-col gap-1.5">
             {items.map((l) => (
-              <div key={l.product_id} className="flex items-center gap-2 text-sm bg-white/5 rounded-xl p-2">
-                <span className="flex-1">{l.emoji} {l.name} — {fmtEUR(l.price)}</span>
-                <input className="input py-1 px-2 text-xs w-32" placeholder="opmerking" value={l.note || ''} onChange={(e) => setNoteLine(l.product_id, e.target.value)} />
-                <button onClick={() => changeQty(l.product_id, -1)} className="btn-ghost p-1.5"><Minus size={14} /></button>
-                <span className="font-mono w-6 text-center">{l.qty}</span>
-                <button onClick={() => changeQty(l.product_id, 1)} className="btn-ghost p-1.5"><Plus size={14} /></button>
-                <button onClick={() => changeQty(l.product_id, -l.qty)} className="btn-danger p-1.5"><Trash2 size={14} /></button>
+              <div key={l.product_id} className="flex items-center gap-2 text-sm bg-white/[0.03] rounded-md p-2">
+                <span className="flex-1 text-white/90">{l.name} — {fmtEUR(l.price)}</span>
+                <input className="input py-1 px-2 text-xs w-28" placeholder="opmerking" value={l.note || ''} onChange={(e) => setNoteLine(l.product_id, e.target.value)} />
+                <button onClick={() => changeQty(l.product_id, -1)} className="btn-ghost p-1"><Minus size={12} /></button>
+                <span className="font-mono w-5 text-center text-xs">{l.qty}</span>
+                <button onClick={() => changeQty(l.product_id, 1)} className="btn-ghost p-1"><Plus size={12} /></button>
+                <button onClick={() => changeQty(l.product_id, -l.qty)} className="btn-danger p-1"><Trash2 size={12} /></button>
               </div>
             ))}
           </div>
         </div>
         <div>
-          <p className="text-sm text-white/60 mb-2">Product toevoegen</p>
-          <div className="flex flex-wrap gap-2">
-            {products.filter((p) => p.available).map((p) => (
-              <button key={p.id} onClick={() => addProduct(p)} className="btn-ghost px-3 py-2 text-sm">{p.emoji} {p.name}</button>
+          <p className="label mb-1.5">Product toevoegen</p>
+          <div className="flex flex-wrap gap-1.5">
+            {products.filter((p) => p.availability === 'available' || (!p.availability && p.available)).map((p) => (
+              <button key={p.id} onClick={() => addProduct(p)} className="btn-ghost px-2.5 py-1.5 text-xs">{p.name}</button>
             ))}
           </div>
         </div>
-        <input className="input" placeholder="Algemene opmerking" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input className="input text-sm" placeholder="Algemene opmerking" value={note} onChange={(e) => setNote(e.target.value)} />
         <div className="flex items-center justify-between gap-2">
           {onCancel && order.status === 'pending' ? (
-            <button onClick={() => onCancel(order)} className="btn-warn px-4 py-3 text-sm">Annuleren</button>
+            <button onClick={() => onCancel(order)} className="btn-warn px-3 py-2 text-xs">Annuleren</button>
           ) : <span />}
           <div className="flex items-center gap-3">
-            <span className="text-white/60 text-sm">Totaal: <b className="text-white">{fmtEUR(total)}</b> · {vakjes} vakjes</span>
-            <button onClick={save} className="btn-primary px-5 py-3" disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : 'Opslaan'}</button>
+            <span className="text-white/50 text-xs">Totaal: <b className="text-white">{fmtEUR(total)}</b> · {vakjes} vakjes</span>
+            <button onClick={save} className="btn-primary px-4 py-2 text-sm" disabled={busy}>{busy ? <Loader2 className="animate-spin" size={16} /> : 'Opslaan'}</button>
           </div>
         </div>
       </div>
@@ -96,27 +96,27 @@ export function CancelModal({ order, onClose, onConfirm }: CancelProps) {
   const canConfirm = confirmText.trim() === required && !busy;
   return (
     <Modal open onClose={onClose} title={`Bestelling #${order.num} annuleren`}>
-      <div className="flex flex-col gap-4">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300">
-          Let op: deze bestelling blijft zichtbaar in de geschiedenis maar kan niet ongedaan gemaakt worden.
+      <div className="flex flex-col gap-3">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-300">
+          Deze bestelling blijft zichtbaar in de geschiedenis maar kan niet ongedaan gemaakt worden.
         </div>
         <div>
-          <p className="text-white/60 text-sm mb-2">Waarom wordt deze bestelling geannuleerd?</p>
-          <div className="flex flex-col gap-2">
+          <p className="text-white/50 text-xs mb-1.5">Waarom wordt deze bestelling geannuleerd?</p>
+          <div className="flex flex-col gap-1.5">
             {reasons.map((r) => (
-              <button key={r} onClick={() => setReason(r)} className={`px-4 py-3 rounded-xl text-left transition ${reason === r ? 'bg-amber-500 text-black font-semibold' : 'bg-white/5 hover:bg-white/10'}`}>{r}</button>
+              <button key={r} onClick={() => setReason(r)} className={`px-3 py-2 rounded-md text-left text-sm transition ${reason === r ? 'bg-amber-600 text-white font-semibold' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}>{r}</button>
             ))}
           </div>
         </div>
         <div>
-          <p className="text-white/60 text-sm mb-1">Typ het bestelnummer <b className="text-white">#{order.num}</b> om te bevestigen:</p>
-          <input className="input font-mono text-center text-lg" placeholder={required} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoFocus />
+          <p className="text-white/50 text-xs mb-1">Typ het bestelnummer <b className="text-white">#{order.num}</b> om te bevestigen:</p>
+          <input className="input font-mono text-center text-base" placeholder={required} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoFocus />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="btn-ghost px-4 py-3 flex-1">Terug</button>
+          <button onClick={onClose} className="btn-ghost px-3 py-2.5 flex-1 text-sm">Terug</button>
           <button
             onClick={async () => { if (!canConfirm) return; setBusy(true); try { await onConfirm(reason); } finally { setBusy(false); } }}
-            className={`px-4 py-3 flex-1 rounded-xl font-semibold transition ${canConfirm ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-white/5 text-white/30 cursor-not-allowed'}`}
+            className={`px-3 py-2.5 flex-1 rounded-md font-semibold text-sm transition ${canConfirm ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-white/[0.03] text-white/30 cursor-not-allowed'}`}
             disabled={!canConfirm}
           >
             {busy ? 'Annuleren...' : 'Bevestig annulering'}
@@ -136,22 +136,22 @@ interface DetailsProps {
 export function DetailsModal({ order, vakjeValue, onClose }: DetailsProps) {
   return (
     <Modal open onClose={onClose} title={`Bestelling #${order.num}`} size="md">
-      <div className="flex flex-col gap-2 text-sm">
-        <div className="flex justify-between"><span className="text-white/50">Tafel</span><span>{order.table_name}</span></div>
-        <div className="flex justify-between"><span className="text-white/50">Ober</span><span>{order.waiter}</span></div>
-        <div className="flex justify-between"><span className="text-white/50">Tijd</span><span>{new Date(order.created_at).toLocaleString('nl-BE')}</span></div>
-        <div className="flex justify-between"><span className="text-white/50">Status</span><span>{order.status}</span></div>
-        {order.cancel_reason && <div className="flex justify-between"><span className="text-white/50">Reden annulering</span><span>{order.cancel_reason}</span></div>}
-        <div className="border-t border-white/10 my-2" />
+      <div className="flex flex-col gap-1.5 text-sm">
+        <div className="flex justify-between"><span className="text-white/40">Tafel</span><span className="text-white">{order.table_name}</span></div>
+        <div className="flex justify-between"><span className="text-white/40">Ober</span><span className="text-white">{order.waiter}</span></div>
+        <div className="flex justify-between"><span className="text-white/40">Tijd</span><span className="text-white">{new Date(order.created_at).toLocaleString('nl-BE')}</span></div>
+        <div className="flex justify-between"><span className="text-white/40">Status</span><span className="text-white">{order.status}</span></div>
+        {order.cancel_reason && <div className="flex justify-between"><span className="text-white/40">Reden annulering</span><span className="text-white">{order.cancel_reason}</span></div>}
+        <div className="border-t border-white/[0.06] my-1.5" />
         {order.items.map((it, i) => (
           <div key={i} className="flex justify-between">
-            <span>{it.qty}× {it.emoji} {it.name} {it.note && <span className="text-white/40 italic">— {it.note}</span>}</span>
-            <span>{fmtEUR(it.price * it.qty)}</span>
+            <span className="text-white/90">{it.qty}× {it.name} {it.note && <span className="text-white/40 italic">— {it.note}</span>}</span>
+            <span className="text-white/60">{fmtEUR(it.price * it.qty)}</span>
           </div>
         ))}
-        <div className="border-t border-white/10 my-2" />
-        <div className="flex justify-between font-bold"><span>Totaal</span><span>{fmtEUR(order.total)}</span></div>
-        <div className="flex justify-between"><span className="text-white/50">Vakjes</span><span>{order.vakjes}</span></div>
+        <div className="border-t border-white/[0.06] my-1.5" />
+        <div className="flex justify-between font-bold"><span className="text-white">Totaal</span><span className="text-white">{fmtEUR(order.total)}</span></div>
+        <div className="flex justify-between"><span className="text-white/40">Vakjes</span><span className="text-white">{order.vakjes}</span></div>
       </div>
     </Modal>
   );
