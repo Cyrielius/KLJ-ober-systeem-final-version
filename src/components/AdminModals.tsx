@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal } from './Modal';
-import { Plus, Trash2, Loader2, ArrowUp, ArrowDown, Printer, Volume2, Users, Palette, Clock, Workflow, Upload, Play } from 'lucide-react';
+import { Plus, Trash2, Loader2, ArrowUp, ArrowDown, Printer, Volume2, Users, Palette, Clock, Workflow, Upload } from 'lucide-react';
 import type { Product, Session, ProductAvailability, WorkflowMode, SoundType } from '../lib/types';
 import { fmtEUR, playNotificationSound } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -248,14 +248,21 @@ export function SettingsModal({ session, sound, onClose, onSave, onToggleSound }
             <p className="label">Geluidstype</p>
             <div className="grid grid-cols-2 gap-2">
               {soundOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => { setSoundType(opt.value); playNotificationSound(opt.value); }}
-                  className={`p-2 rounded-md text-sm transition border flex items-center justify-between ${soundType === opt.value ? 'border-emerald-500/50 bg-emerald-500/[0.08] text-white' : 'border-white/[0.06] hover:border-white/[0.12] text-white/70'}`}
-                >
-                  {opt.label}
-                  <Play size={12} className="text-white/40" />
-                </button>
+                <div key={opt.value} className="flex items-center gap-1">
+                  <button
+                    onClick={() => setSoundType(opt.value)}
+                    className={`flex-1 p-2 rounded-md text-sm transition border text-left ${soundType === opt.value ? 'border-emerald-500/50 bg-emerald-500/[0.08] text-white' : 'border-white/[0.06] hover:border-white/[0.12] text-white/70'}`}
+                  >
+                    {opt.label}
+                  </button>
+                  <button
+                    onClick={() => playNotificationSound(opt.value)}
+                    className="btn-ghost p-1.5 text-xs"
+                    title="Preview"
+                  >
+                    ▶
+                  </button>
+                </div>
               ))}
             </div>
           </div>

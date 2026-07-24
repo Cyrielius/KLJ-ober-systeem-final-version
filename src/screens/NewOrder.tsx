@@ -22,13 +22,13 @@ export function NewOrder({ products, vakjeValue, waiter, onBack, onSubmit }: Pro
   const cartBarRef = useRef<HTMLDivElement>(null);
   const [cartBarHeight, setCartBarHeight] = useState(0);
 
-  // Only show available products (unavailable and hidden are excluded from ordering)
-  const orderable = products.filter((p) => p.availability === 'available' || (!p.availability && p.available));
+  // Hidden products are excluded entirely; unavailable products show grayed out
+  const visible = products.filter((p) => p.availability !== 'hidden' && (p.availability || (p.available ? 'available' : 'unavailable')) !== 'hidden');
   const filtered = query.trim()
-    ? orderable.filter((p) =>
+    ? visible.filter((p) =>
         p.name.toLowerCase().includes(query.trim().toLowerCase()) ||
         p.category.toLowerCase().includes(query.trim().toLowerCase()))
-    : orderable;
+    : visible;
   const categories = [...new Set(filtered.map((p) => p.category))].sort();
   const cartLines = Object.values(cart);
   const total = cartLines.reduce((s, l) => s + l.price * l.qty, 0);
@@ -124,12 +124,15 @@ export function NewOrder({ products, vakjeValue, waiter, onBack, onSubmit }: Pro
               {!isCollapsed && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-1">
                   {catProducts.map((p) => {
+                    const avail = p.availability || (p.available ? 'available' : 'unavailable');
+                    const isUnavailable = avail === 'unavailable';
                     const line = cart[p.id];
                     return (
                       <button
                         key={p.id}
-                        onClick={() => add(p)}
-                        className={`card p-2.5 text-left transition active:scale-[0.97] relative ${line ? 'border-emerald-500/40' : 'hover:border-white/[0.12]'}`}
+                        onClick={() => !isUnavailable && add(p)}
+                        disabled={isUnavailable}
+                        className={`card p-2.5 text-left transition relative ${isUnavailable ? 'opacity-40 cursor-not-allowed' : line ? 'border-emerald-500/40 active:scale-[0.97]' : 'hover:border-white/[0.12] active:scale-[0.97]'}`}
                       >
                         {p.photo_url ? (
                           <img src={p.photo_url} alt="" className="w-full h-16 rounded object-cover mb-1" onError={(e) => (e.currentTarget.style.display = 'none')} />
@@ -139,6 +142,7 @@ export function NewOrder({ products, vakjeValue, waiter, onBack, onSubmit }: Pro
                         <p className="font-semibold text-sm text-white leading-tight">{p.name}</p>
                         <p className="text-emerald-400 text-xs">{fmtEUR(Number(p.price))}</p>
                         <p className="text-white/30 text-[10px]">{vakjesFor(Number(p.price), vakjeValue, p.vakjes_override)} vakjes</p>
+                        {isUnavailable && <p className="text-amber-400 text-[10px] font-semibold">Niet beschikbaar</p>}
                         {line && (
                           <span className="absolute top-1.5 right-1.5 bg-emerald-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                             {line.qty}

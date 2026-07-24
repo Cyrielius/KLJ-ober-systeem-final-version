@@ -88,9 +88,10 @@ export function KitchenScreen({ session, onLeave }: Props) {
   }
 
   async function handleConfirmMade(o: Order) {
-    await updateOrderStatus(o.id, 'done', undefined, session.id);
+    // In 1-step mode: kitchen done = order immediately completed (no waiter pickup step)
+    await updateOrderStatus(o.id, 'completed', undefined, session.id);
     setConfirmOrder(null);
-    push(`Bestelling #${o.num} gemaakt`, 'success');
+    push(`Bestelling #${o.num} afgerond`, 'success');
   }
 
   async function handleRevert(o: Order) {

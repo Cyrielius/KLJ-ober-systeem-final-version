@@ -38,6 +38,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
   const [detailsOrder, setDetailsOrder] = useState<Order | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpandedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   async function refresh() {
     try {
@@ -168,12 +170,13 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                     order={o}
                     workflowMode={workflowMode}
                     timers={timers}
+                    expanded={expandedIds.has(o.id)}
+                    onToggle={() => toggleExpanded(o.id)}
                     onAdvance={handleAdvance}
                     onRevert={handleRevert}
                     onDetails={setDetailsOrder}
                     onPrint={(o) => push('Print niet beschikbaar op ober', 'info')}
                     showRevert
-                    defaultExpanded
                   />
                 ))}
                 {readyOrders.length === 0 && <p className="text-white/30 text-xs">Niets klaar om af te halen.</p>}
@@ -192,6 +195,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                     order={o}
                     workflowMode={workflowMode}
                     timers={timers}
+                    expanded={expandedIds.has(o.id)}
+                    onToggle={() => toggleExpanded(o.id)}
                     onAdvance={handleAdvance}
                     onEdit={setEditOrder}
                     onRevert={handleRevert}
@@ -215,6 +220,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                     order={o}
                     workflowMode={workflowMode}
                     timers={timers}
+                    expanded={expandedIds.has(o.id)}
+                    onToggle={() => toggleExpanded(o.id)}
                     onRevert={handleRevert}
                     onDetails={setDetailsOrder}
                     showRevert
@@ -236,6 +243,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                 order={o}
                 workflowMode={workflowMode}
                 timers={timers}
+                expanded={expandedIds.has(o.id)}
+                onToggle={() => toggleExpanded(o.id)}
                 onDetails={setDetailsOrder}
                 onEdit={setEditOrder}
                 onRevert={handleRevert}
@@ -257,6 +266,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                 order={o}
                 workflowMode={workflowMode}
                 timers={timers}
+                expanded={expandedIds.has(o.id)}
+                onToggle={() => toggleExpanded(o.id)}
                 onDetails={setDetailsOrder}
                 onRevert={handleRevert}
                 showRevert

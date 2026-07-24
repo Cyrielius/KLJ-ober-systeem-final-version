@@ -19,8 +19,9 @@ export function waitMinutes(iso: string): number {
 }
 
 // Wachttijd in minuten, bevroren op het tijdstip dat de bestelling klaar werd gemarkeerd.
-export function waitMinutesFrozen(order: { created_at: string; completed_at?: string | null }): number {
-  const end = order.completed_at ? new Date(order.completed_at).getTime() : Date.now();
+export function waitMinutesFrozen(order: { created_at: string; completed_at?: string | null; picked_up_at?: string | null }): number {
+  const freeze = order.picked_up_at || order.completed_at;
+  const end = freeze ? new Date(freeze).getTime() : Date.now();
   return Math.floor((end - new Date(order.created_at).getTime()) / 60000);
 }
 

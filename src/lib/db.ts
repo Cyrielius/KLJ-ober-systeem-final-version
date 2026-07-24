@@ -199,15 +199,12 @@ export async function updateOrderStatus(
   const now = new Date().toISOString();
   const patch: any = { status, updated_at: now };
   if (reason) patch.cancel_reason = reason;
-  // completed_at tracks when kitchen marks done (2-step) or made (1-step)
+  // completed_at freezes when kitchen marks done — never cleared after that
   if (status === 'done') patch.completed_at = now;
-  if (status !== 'done') patch.completed_at = null;
-  // picked_up_at tracks when waiter completes the order
+  if (status === 'pending' || status === 'cancelled') patch.completed_at = null;
+  // picked_up_at set when waiter marks completed
   if (status === 'completed') patch.picked_up_at = now;
   if (status !== 'completed') patch.picked_up_at = null;
-  // made_at tracks 1-step "Bestelling gemaakt"
-  if (status === 'done') patch.made_at = now;
-  if (status !== 'done') patch.made_at = null;
 
   const { error } = await supabase.from('klj_orders').update(patch).eq('id', id);
   if (error) throw error;

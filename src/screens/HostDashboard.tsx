@@ -41,6 +41,8 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
   const [usersModal, setUsersModal] = useState(false);
   const [knownOrderIds, setKnownOrderIds] = useState<Set<string>>(new Set());
   const [currentSession, setCurrentSession] = useState(session);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpandedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const workflowMode: WorkflowMode = currentSession.workflow_mode ?? '2-step';
   const joinUrl = `${location.origin}/?code=${currentSession.code}`;
@@ -242,7 +244,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
               <h2 className="section-title mb-2">{pendingLabel} — {sortedOrders.pending.length}</h2>
               <div className="grid md:grid-cols-2 gap-2">
                 {sortedOrders.pending.map((o) => (
-                  <OrderCard key={o.id} order={o} workflowMode={workflowMode} timers={timers} onAdvance={handleAdvance} onRevert={handleRevert} onEdit={setEditOrder} onCancel={setCancelOrder} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert />
+                  <OrderCard key={o.id} order={o} workflowMode={workflowMode} timers={timers} expanded={expandedIds.has(o.id)} onToggle={() => toggleExpanded(o.id)} onAdvance={handleAdvance} onRevert={handleRevert} onEdit={setEditOrder} onCancel={setCancelOrder} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert />
                 ))}
               </div>
               {sortedOrders.pending.length === 0 && <p className="text-white/30 text-xs">Geen open bestellingen.</p>}
@@ -251,7 +253,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
               <h2 className="section-title mb-2 text-sky-400">{doneLabel} — {sortedOrders.done.length}</h2>
               <div className="grid md:grid-cols-2 gap-2">
                 {sortedOrders.done.slice(0, 20).map((o) => (
-                  <OrderCard key={o.id} order={o} workflowMode={workflowMode} timers={timers} onAdvance={handleAdvance} onRevert={handleRevert} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert />
+                  <OrderCard key={o.id} order={o} workflowMode={workflowMode} timers={timers} expanded={expandedIds.has(o.id)} onToggle={() => toggleExpanded(o.id)} onAdvance={handleAdvance} onRevert={handleRevert} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert />
                 ))}
               </div>
               {sortedOrders.done.length === 0 && <p className="text-white/30 text-xs">Niets klaar.</p>}
@@ -261,7 +263,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
                 <h2 className="section-title mb-2">Afgerond — {sortedOrders.completed.length}</h2>
                 <div className="grid md:grid-cols-2 gap-2">
                   {sortedOrders.completed.slice(0, 20).map((o) => (
-                    <OrderCard key={o.id} order={o} workflowMode={workflowMode} onRevert={handleRevert} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert compact />
+                    <OrderCard key={o.id} order={o} workflowMode={workflowMode} expanded={expandedIds.has(o.id)} onToggle={() => toggleExpanded(o.id)} onRevert={handleRevert} onPrint={printReceipt} onDetails={setDetailsOrder} showRevert compact />
                   ))}
                 </div>
               </section>
@@ -271,7 +273,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
                 <h2 className="section-title mb-2">Geannuleerd — {sortedOrders.cancelled.length}</h2>
                 <div className="grid md:grid-cols-2 gap-2">
                   {sortedOrders.cancelled.slice(0, 10).map((o) => (
-                    <OrderCard key={o.id} order={o} workflowMode={workflowMode} onDetails={setDetailsOrder} compact />
+                    <OrderCard key={o.id} order={o} workflowMode={workflowMode} expanded={expandedIds.has(o.id)} onToggle={() => toggleExpanded(o.id)} onDetails={setDetailsOrder} compact />
                   ))}
                 </div>
               </section>

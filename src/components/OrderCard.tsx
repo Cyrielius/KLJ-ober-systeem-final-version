@@ -13,6 +13,8 @@ export interface TimerThresholds {
 interface Props {
   order: Order;
   workflowMode: WorkflowMode;
+  expanded: boolean;
+  onToggle: () => void;
   onAdvance?: (o: Order) => void;
   onRevert?: (o: Order) => void;
   onEdit?: (o: Order) => void;
@@ -21,15 +23,13 @@ interface Props {
   onDetails?: (o: Order) => void;
   compact?: boolean;
   timers?: TimerThresholds;
-  defaultExpanded?: boolean;
   showRevert?: boolean;
 }
 
-export function OrderCard({ order, workflowMode, onAdvance, onRevert, onEdit, onCancel, onPrint, onDetails, compact, timers, defaultExpanded, showRevert }: Props) {
+export function OrderCard({ order, workflowMode, expanded, onToggle, onAdvance, onRevert, onEdit, onCancel, onPrint, onDetails, compact, timers, showRevert }: Props) {
   const t = timers ?? { yellow: 5, orange: 8, red: 10, critical: 15 };
-  const [expanded, setExpanded] = useState(!!defaultExpanded);
   const [confirmAction, setConfirmAction] = useState<'advance' | 'cancel' | null>(null);
-  const frozen = (order.status === 'done' || order.status === 'completed') && order.completed_at;
+  const frozen = (order.status === 'done' || order.status === 'completed') && (order.completed_at || order.picked_up_at);
   const min = waitMinutesFrozen(order);
 
   const statusBadge =
@@ -42,29 +42,27 @@ export function OrderCard({ order, workflowMode, onAdvance, onRevert, onEdit, on
       : <span className="badge bg-red-500/15 text-red-400">{statusLabel('cancelled', workflowMode)}</span>;
 
   const isUrgent = order.status === 'pending' && min >= t.critical;
-  const isRed = order.status === 'pending' && min >= t.red;
+  const isRed    = order.status === 'pending' && min >= t.red;
   const isOrange = order.status === 'pending' && min >= t.orange;
   const isYellow = order.status === 'pending' && min >= t.yellow;
 
   const borderClass = isUrgent ? 'border-red-500/60 animate-urgent'
-    : isRed ? 'border-red-500/40'
+    : isRed    ? 'border-red-500/40'
     : isOrange ? 'border-amber-500/40'
     : isYellow ? 'border-yellow-500/30'
     : 'border-white/[0.06]';
 
   const minColor = isUrgent ? 'text-red-400'
-    : isRed ? 'text-red-400'
+    : isRed    ? 'text-red-400'
     : isOrange ? 'text-amber-400'
     : isYellow ? 'text-yellow-400'
     : 'text-white/50';
 
-  const isActive = order.status === 'pending' || order.status === 'done';
   const canAdvance = onAdvance && nextStatus(order.status, workflowMode) !== null;
-  const canRevert = showRevert && onRevert && prevStatus(order.status, workflowMode) !== null;
+  const canRevert  = showRevert && onRevert && prevStatus(order.status, workflowMode) !== null;
 
   function handleAdvance() {
     if (!onAdvance) return;
-    // In 2-step mode, advancing from done→completed (ober klaar) requires confirmation
     if (order.status === 'done' && workflowMode === '2-step') {
       setConfirmAction('advance');
     } else {
@@ -72,15 +70,10 @@ export function OrderCard({ order, workflowMode, onAdvance, onRevert, onEdit, on
     }
   }
 
-  function handleCancel() {
-    if (!onCancel) return;
-    setConfirmAction('cancel');
-  }
-
   return (
     <div className={`card border ${borderClass} overflow-hidden`}>
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={onToggle}
         className="w-full p-3 flex items-start justify-between gap-3 text-left"
       >
         <div className="flex flex-col gap-1.5 min-w-0">
@@ -162,14 +155,10 @@ export function OrderCard({ order, workflowMode, onAdvance, onRevert, onEdit, on
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
               {onPrint && (
-                <button onClick={() => onPrint(order)} className="btn-ghost px-2.5 py-1.5 text-xs">
-                  Print
-                </button>
+                <button onClick={() => onPrint(order)} className="btn-ghost px-2.5 py-1.5 text-xs">Print</button>
               )}
               {onEdit && order.status === 'pending' && (
-                <button onClick={() => onEdit(order)} className="btn-ghost px-2.5 py-1.5 text-xs">
-                  Aanpassen
-                </button>
+                <button onClick={() => onEdit(order)} className="btn-ghost px-2.5 py-1.5 text-xs">Aanpassen</button>
               )}
               {canRevert && (
                 <button onClick={() => onRevert!(order)} className="btn-ghost px-2.5 py-1.5 text-xs flex items-center gap-1">
@@ -177,15 +166,10 @@ export function OrderCard({ order, workflowMode, onAdvance, onRevert, onEdit, on
                 </button>
               )}
               {onCancel && (order.status === 'pending' || order.status === 'done') && (
-                <button onClick={handleCancel} className="btn-warn px-2.5 py-1.5 text-xs">
-                  Annuleren
-                </button>
+                <button onClick={() => setConfirmAction('cancel')} className="btn-warn px-2.5 py-1.5 text-xs">Annuleren</button>
               )}
               {canAdvance && (
-                <button
-                  onClick={handleAdvance}
-                  className="btn-primary px-3 py-1.5 text-xs ml-auto"
-                >
+                <button onClick={handleAdvance} className="btn-primary px-3 py-1.5 text-xs ml-auto">
                   {advanceLabel(order.status, workflowMode)}
                 </button>
               )}
