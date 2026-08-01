@@ -1,4 +1,5 @@
 import { Monitor, Smartphone, Flame } from 'lucide-react';
+import { unlockAudio } from '../lib/utils';
 
 interface Props {
   onHost: () => void;
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function StartScreen({ onHost, onWaiter, onKitchen }: Props) {
+  const go = (fn: () => void) => { unlockAudio(); fn(); };
   return (
     <div className="min-h-full flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md flex flex-col gap-6">
@@ -17,7 +19,7 @@ export function StartScreen({ onHost, onWaiter, onKitchen }: Props) {
 
         <div className="flex flex-col gap-2">
           <button
-            onClick={onHost}
+            onClick={() => go(onHost)}
             className="card-hover p-4 flex items-center gap-3 text-left active:scale-[0.99]"
           >
             <div className="w-10 h-10 rounded-md bg-emerald-500/10 flex items-center justify-center flex-none">
@@ -30,7 +32,7 @@ export function StartScreen({ onHost, onWaiter, onKitchen }: Props) {
           </button>
 
           <button
-            onClick={onKitchen}
+            onClick={() => go(onKitchen)}
             className="card-hover p-4 flex items-center gap-3 text-left active:scale-[0.99]"
           >
             <div className="w-10 h-10 rounded-md bg-amber-500/10 flex items-center justify-center flex-none">
@@ -43,7 +45,7 @@ export function StartScreen({ onHost, onWaiter, onKitchen }: Props) {
           </button>
 
           <button
-            onClick={onWaiter}
+            onClick={() => go(onWaiter)}
             className="card-hover p-4 flex items-center gap-3 text-left active:scale-[0.99]"
           >
             <div className="w-10 h-10 rounded-md bg-sky-500/10 flex items-center justify-center flex-none">

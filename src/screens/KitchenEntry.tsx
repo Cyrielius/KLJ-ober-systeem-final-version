@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { ArrowLeft, Loader2, Flame } from 'lucide-react';
 import { getSessionByCode } from '../lib/db';
+import { unlockAudio } from '../lib/utils';
 import type { Session } from '../lib/types';
 
 interface Props {
   onBack: () => void;
-  onJoin: (s: Session) => void;
+  onJoin: (s: Session, name: string) => void;
 }
 
 export function KitchenEntry({ onBack, onJoin }: Props) {
@@ -15,17 +16,20 @@ export function KitchenEntry({ onBack, onJoin }: Props) {
       return p ? p.replace(/\D/g, '').slice(0, 6) : '';
     } catch { return ''; }
   })();
+  const [name, setName] = useState('');
   const [code, setCode] = useState(initialCode);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   async function connect() {
+    unlockAudio();
+    if (!name.trim()) return setErr('Vul je naam in.');
     if (!code.trim()) return setErr('Vul de sessiecode in.');
     setBusy(true); setErr('');
     try {
       const s = await getSessionByCode(code.trim());
       if (!s) return setErr('Sessie niet gevonden.');
-      onJoin(s);
+      onJoin(s, name.trim());
     } catch (e: any) { setErr(e.message || 'Fout bij verbinden.'); }
     finally { setBusy(false); }
   }
@@ -39,15 +43,19 @@ export function KitchenEntry({ onBack, onJoin }: Props) {
       </div>
       <div className="flex flex-col gap-3">
         <div>
+          <label className="label">Jouw naam</label>
+          <input className="input mt-1" placeholder="bv. Jef" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initialCode} />
+        </div>
+        <div>
           <label className="label">Sessiecode</label>
-          <input className="input tracking-widest text-center text-base mt-1" placeholder="000000" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && connect()} readOnly={!!initialCode} autoFocus={!initialCode} />
+          <input className="input tracking-widest text-center text-base mt-1" placeholder="000000" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && connect()} readOnly={!!initialCode} autoFocus={!!initialCode} />
         </div>
         {initialCode && <p className="text-emerald-400 text-xs">Sessiecode ingevuld via QR-code.</p>}
         {err && <p className="text-red-400 text-xs">{err}</p>}
         <button onClick={connect} className="btn-primary py-3 text-sm" disabled={busy}>
           {busy ? <Loader2 className="animate-spin" size={16} /> : <><Flame size={16} /> Verbinden</>}
         </button>
-        <p className="text-white/25 text-xs">Scan de QR-code die de host toont, of typ de 6-cijferige sessiecode in.</p>
+        <p className="text-white/25 text-xs">Vul je naam in zodat andere keukenmedewerkers zien wie waarmee bezig is.</p>
       </div>
     </div>
   );

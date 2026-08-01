@@ -1,0 +1,1 @@
+ALTER TABLE klj_orders ADD COLUMN IF NOT EXISTS picked_up_at timestamptz;

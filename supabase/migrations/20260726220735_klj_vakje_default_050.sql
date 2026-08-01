@@ -1,0 +1,1 @@
+ALTER TABLE klj_sessions ALTER COLUMN vakje_value SET DEFAULT 0.50;

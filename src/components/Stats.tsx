@@ -43,13 +43,18 @@ export function Stats({ orders }: { orders: Order[] }) {
     revenueOrders.forEach((o) => { waiterCount[o.waiter] = (waiterCount[o.waiter] || 0) + Number(o.total); });
     const topWaiters = Object.entries(waiterCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-    const hourly: Record<string, number> = {};
+    // Omzet per 5 minuten — veel accurater dan per uur voor korte evenementen.
+    const fiveMin: Record<string, number> = {};
     revenueOrders.forEach((o) => {
-      const h = new Date(o.created_at).getHours();
-      hourly[h] = (hourly[h] || 0) + Number(o.total);
+      const d = new Date(o.created_at);
+      const h = String(d.getHours()).padStart(2, '0');
+      const m = String(Math.floor(d.getMinutes() / 5) * 5).padStart(2, '0');
+      const key = `${h}:${m}`;
+      fiveMin[key] = (fiveMin[key] || 0) + Number(o.total);
     });
-    const hourlyRows = Object.entries(hourly).sort((a, b) => Number(a[0]) - Number(b[0]));
-    const maxHour = Math.max(1, ...hourlyRows.map((r) => r[1]));
+    // Bouw een continue tijd-as vanaf de eerste tot de laatste bestelling
+    // (in stappen van 5 min) zodat lege gaten ook zichtbaar zijn.
+    const fiveMinRows = build5MinBuckets(fiveMin, revenueOrders);
 
     return {
       totalActive: active.length,
@@ -64,8 +69,8 @@ export function Stats({ orders }: { orders: Order[] }) {
       topProducts,
       topTables,
       topWaiters,
-      hourlyRows,
-      maxHour,
+      hourlyRows: fiveMinRows,
+      maxHour: Math.max(1, ...fiveMinRows.map((r) => r[1])),
       allProducts,
       productRevenue,
     };
@@ -106,16 +111,27 @@ export function Stats({ orders }: { orders: Order[] }) {
       </div>
 
       <div className="card p-3">
-        <p className="section-title mb-2">Omzet per uur</p>
-        {s.hourlyRows.length === 0 && <p className="text-white/30 text-xs">Nog geen data</p>}
-        <div className="flex items-end gap-1 h-32">
-          {s.hourlyRows.map(([h, v]) => (
-            <div key={h} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-              <div className="w-full bg-emerald-600/70 rounded-t hover:bg-emerald-500 transition-colors" style={{ height: `${(v / s.maxHour) * 100}%` }} title={fmtEUR(v)} />
-              <span className="text-white/40 text-[10px]">{h}u</span>
-            </div>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <p className="section-title">Omzet per 5 minuten</p>
+          <span className="text-white/30 text-[10px]">live</span>
         </div>
+        {s.hourlyRows.length === 0 && <p className="text-white/30 text-xs">Nog geen data</p>}
+        {s.hourlyRows.length > 0 && (
+          <div className="flex items-end gap-px h-32 overflow-x-auto">
+            {s.hourlyRows.map(([h, v]) => (
+              <div key={h} className="flex flex-col items-center gap-1 min-w-0 h-full justify-end" style={{ flex: '0 0 14px' }}>
+                <div className="w-full bg-emerald-600/70 rounded-t hover:bg-emerald-500 transition-colors" style={{ height: `${Math.max(4, (v / s.maxHour) * 100)}%` }} title={`${h} — ${fmtEUR(v)}`} />
+              </div>
+            ))}
+          </div>
+        )}
+        {s.hourlyRows.length > 0 && (
+          <div className="flex gap-px mt-1 overflow-x-auto">
+            {s.hourlyRows.map(([h], i) => (
+              i % 6 === 0 ? <span key={h} className="text-white/40 text-[9px]" style={{ flex: '0 0 84px' }}>{h}</span> : <span key={h} style={{ flex: '0 0 14px' }} />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-3 gap-2">
@@ -163,6 +179,25 @@ function TopList({ title, rows, fmt }: { title: string; rows: [string, number][]
       </div>
     </div>
   );
+}
+
+// Bouw een continue reeks van 5-minuten buckets tussen de eerste en laatste bestelling,
+// zodat ook tijden zonder omzet zichtbaar zijn in de grafiek.
+function build5MinBuckets(data: Record<string, number>, orders: Order[]): [string, number][] {
+  if (orders.length === 0) return [];
+  const times = orders.map((o) => new Date(o.created_at).getTime());
+  const start = Math.min(...times);
+  const end = Math.max(...times, Date.now());
+  const step = 5 * 60 * 1000;
+  const buckets: [string, number][] = [];
+  for (let t = start; t <= end + step; t += step) {
+    const d = new Date(t);
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(Math.floor(d.getMinutes() / 5) * 5).padStart(2, '0');
+    const key = `${h}:${m}`;
+    buckets.push([key, data[key] || 0]);
+  }
+  return buckets;
 }
 
 // Get product totals from completed + done orders

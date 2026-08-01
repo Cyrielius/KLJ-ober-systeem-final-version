@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Loader2, Wifi } from 'lucide-react';
 import { getSessionByCode } from '../lib/db';
+import { unlockAudio } from '../lib/utils';
 import type { Session } from '../lib/types';
 
 interface Props {
@@ -22,6 +23,7 @@ export function WaiterEntry({ onBack, onJoin, savedName }: Props) {
   const [err, setErr] = useState('');
 
   async function connect() {
+    unlockAudio();
     if (!name.trim()) return setErr('Vul je naam in.');
     if (!code.trim()) return setErr('Vul de sessiecode in.');
     setBusy(true); setErr('');

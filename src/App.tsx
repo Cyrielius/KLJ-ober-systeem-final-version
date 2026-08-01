@@ -8,6 +8,7 @@ import { WaiterDashboard } from './screens/WaiterDashboard';
 import { KitchenEntry } from './screens/KitchenEntry';
 import { KitchenScreen } from './screens/KitchenScreen';
 import { getSessionByCode, syncPendingOrders } from './lib/db';
+import { unlockAudio } from './lib/utils';
 import type { Session } from './lib/types';
 
 type Role = 'start' | 'host' | 'waiter' | 'kitchen';
@@ -15,6 +16,7 @@ type ConnStatus = 'online' | 'sync' | 'offline';
 
 interface HostState { session: Session }
 interface WaiterState { session: Session; name: string }
+interface KitchenState { session: Session; name: string; workerSessionId: string }
 
 const LS_HOST = 'klj_active_host';
 const LS_WAITER_NAME = 'klj_waiter_name';
@@ -25,7 +27,17 @@ function App() {
   const [role, setRole] = useState<Role>('start');
   const [host, setHost] = useState<HostState | null>(null);
   const [waiter, setWaiter] = useState<WaiterState | null>(null);
+  const [kitchen, setKitchen] = useState<KitchenState | null>(null);
   const [conn, setConn] = useState<ConnStatus>('online');
+
+  // History guard: keep the user on the site. Push a marker state on mount and
+  // re-push it on popstate so the browser back button cannot navigate away from
+  // the app (sessions auto-resume from localStorage on any reload anyway).
+  useEffect(() => {
+    const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); };
+    window.addEventListener('pointerdown', unlock);
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
 
   // History guard: keep the user on the site. Push a marker state on mount and
   // re-push it on popstate so the browser back button cannot navigate away from
@@ -103,10 +115,17 @@ function App() {
       try {
         const rawKitchen = localStorage.getItem(LS_KITCHEN_SESSION);
         if (rawKitchen) {
-          const parsed = JSON.parse(rawKitchen) as { code: string };
+          const parsed = JSON.parse(rawKitchen) as { code: string; name: string; workerSessionId: string };
+          // Ongeldige/verouderde workerSessionId (geen UUID) vervangen door geldige
+          const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          let workerSessionId = parsed.workerSessionId;
+          if (!uuidRe.test(workerSessionId)) {
+            workerSessionId = crypto.randomUUID();
+            localStorage.setItem(LS_KITCHEN_SESSION, JSON.stringify({ code: parsed.code, name: parsed.name, workerSessionId }));
+          }
           const s = await getSessionByCode(parsed.code);
           if (!cancelled && s) {
-            setHost({ session: s });
+            setKitchen({ session: s, name: parsed.name, workerSessionId });
             setRole('kitchen');
             return;
           }
@@ -129,9 +148,10 @@ function App() {
     setRole('waiter');
   }, []);
 
-  const startKitchen = useCallback((s: Session) => {
-    localStorage.setItem(LS_KITCHEN_SESSION, JSON.stringify({ code: s.code }));
-    setHost({ session: s });
+  const startKitchen = useCallback((s: Session, name: string) => {
+    const workerSessionId = crypto.randomUUID();
+    localStorage.setItem(LS_KITCHEN_SESSION, JSON.stringify({ code: s.code, name, workerSessionId }));
+    setKitchen({ session: s, name, workerSessionId });
     setRole('kitchen');
   }, []);
 
@@ -149,7 +169,7 @@ function App() {
 
   const leaveKitchen = useCallback(() => {
     localStorage.removeItem(LS_KITCHEN_SESSION);
-    setHost(null);
+    setKitchen(null);
     setRole('start');
   }, []);
 
@@ -161,8 +181,8 @@ function App() {
         {role === 'host' && host && <HostDashboard session={host.session} onLeave={leaveHost} connStatus={conn} />}
         {role === 'waiter' && !waiter && <WaiterEntry onBack={() => setRole('start')} onJoin={startWaiter} savedName={localStorage.getItem(LS_WAITER_NAME) || undefined} />}
         {role === 'waiter' && waiter && <WaiterDashboard session={waiter.session} waiterName={waiter.name} onLeave={leaveWaiter} connStatus={conn} />}
-        {role === 'kitchen' && !host && <KitchenEntry onBack={() => setRole('start')} onJoin={startKitchen} />}
-        {role === 'kitchen' && host && <KitchenScreen session={host.session} onLeave={leaveKitchen} />}
+        {role === 'kitchen' && !kitchen && <KitchenEntry onBack={() => setRole('start')} onJoin={startKitchen} />}
+        {role === 'kitchen' && kitchen && <KitchenScreen session={kitchen.session} workerName={kitchen.name} workerSessionId={kitchen.workerSessionId} onLeave={leaveKitchen} />}
       </div>
     </ToastProvider>
   );

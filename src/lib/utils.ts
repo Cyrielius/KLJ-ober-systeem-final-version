@@ -52,7 +52,7 @@ export function statusLabel(status: OrderStatus, mode: WorkflowMode): string {
   if (mode === '1-step') {
     switch (status) {
       case 'pending': return 'Verzonden';
-      case 'done': return 'Gemaakt';
+      case 'done': return 'Afgerond';
       case 'completed': return 'Afgerond';
       case 'cancelled': return 'Geannuleerd';
     }
@@ -69,8 +69,8 @@ export function statusLabel(status: OrderStatus, mode: WorkflowMode): string {
 // Next status forward in the workflow
 export function nextStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus | null {
   if (mode === '1-step') {
-    if (status === 'pending') return 'done';
-    if (status === 'done') return 'completed';
+    // Verzonden -> Afgerond (geen tussentijdse stap)
+    if (status === 'pending') return 'completed';
     return null;
   }
   // 2-step
@@ -82,8 +82,8 @@ export function nextStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus
 // Previous status (revert one step)
 export function prevStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus | null {
   if (mode === '1-step') {
-    if (status === 'completed') return 'done';
-    if (status === 'done') return 'pending';
+    // Verzonden <-> Afgerond
+    if (status === 'completed') return 'pending';
     return null;
   }
   // 2-step
@@ -95,8 +95,7 @@ export function prevStatus(status: OrderStatus, mode: WorkflowMode): OrderStatus
 // Action button label for advancing status
 export function advanceLabel(status: OrderStatus, mode: WorkflowMode): string {
   if (mode === '1-step') {
-    if (status === 'pending') return 'Bestelling gemaakt';
-    if (status === 'done') return 'Ober klaar';
+    if (status === 'pending') return 'Bestelling afgerond';
     return '';
   }
   // 2-step
@@ -108,8 +107,7 @@ export function advanceLabel(status: OrderStatus, mode: WorkflowMode): string {
 // Revert button label
 export function revertLabel(status: OrderStatus, mode: WorkflowMode): string {
   if (mode === '1-step') {
-    if (status === 'done') return 'Terug naar Verzonden';
-    if (status === 'completed') return 'Terug naar Gemaakt';
+    if (status === 'completed') return 'Terug naar Verzonden';
     return '';
   }
   // 2-step
@@ -119,17 +117,59 @@ export function revertLabel(status: OrderStatus, mode: WorkflowMode): string {
 }
 
 // Play a notification sound based on session config
-export function playNotificationSound(soundType: SoundType, soundUrl?: string | null) {
+// Browsers blokkeren Web Audio zonder gebruikersinteractie. We houdt een
+// unlocked-vlag bij en unlocken de AudioContext bij de eerste tap/klik.
+let _audioUnlocked = false;
+let _audioCtx: AudioContext | null = null;
+
+export function unlockAudio() {
+  if (_audioUnlocked) return;
+  try {
+    _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    _audioUnlocked = true;
+  } catch { /* ignore */ }
+}
+
+export function isAudioUnlocked(): boolean {
+  return _audioUnlocked;
+}
+
+// Cache gedecodeerde custom audio buffers per URL (decode is duur)
+const _audioBuffers = new Map<string, AudioBuffer>();
+
+export async function playNotificationSound(soundType: SoundType, soundUrl?: string | null) {
+  if (!_audioUnlocked) {
+    try {
+      _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (_audioCtx.state === 'suspended') _audioCtx.resume();
+      _audioUnlocked = true;
+    } catch { return; }
+  }
+  const ctx = _audioCtx;
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { await ctx.resume().catch(() => {}); }
+
   if (soundType === 'custom' && soundUrl) {
     try {
-      const audio = new Audio(soundUrl);
-      audio.play().catch(() => {});
+      let buffer = _audioBuffers.get(soundUrl);
+      if (!buffer) {
+        const res = await fetch(soundUrl);
+        const arr = await res.arrayBuffer();
+        buffer = await ctx.decodeAudioData(arr);
+        _audioBuffers.set(soundUrl, buffer);
+      }
+      const src = ctx.createBufferSource();
+      const g = ctx.createGain();
+      src.buffer = buffer;
+      src.connect(g); g.connect(ctx.destination);
+      g.gain.value = 0.8;
+      src.start();
       return;
     } catch {}
   }
 
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const now = ctx.currentTime;
 
     if (soundType === 'chime') {

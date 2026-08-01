@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Session, Product, TableConfig, Order, OrderItem, OrderStatus, WorkflowMode, SoundType, ProductAvailability } from './types';
+import type { Session, Product, TableConfig, Order, OrderItem, OrderStatus, SoundType, ProductAvailability, KitchenSession } from './types';
 import { addPending, loadPending, removePending } from './offline';
 import { uid, vakjesFor } from './utils';
 
@@ -205,6 +205,12 @@ export async function updateOrderStatus(
   // picked_up_at set when waiter marks completed
   if (status === 'completed') patch.picked_up_at = now;
   if (status !== 'completed') patch.picked_up_at = null;
+  // Claim vrijgeven zodra bestelling afgerond of geannuleerd is (geen spookclaims)
+  if (status === 'completed' || status === 'cancelled') {
+    patch.kitchen_claimed_by = null;
+    patch.kitchen_claimed_session_id = null;
+    patch.kitchen_claimed_at = null;
+  }
 
   const { error } = await supabase.from('klj_orders').update(patch).eq('id', id);
   if (error) throw error;
@@ -232,7 +238,6 @@ export async function updateOrder(id: string, patch: Partial<Order>): Promise<vo
 }
 
 // ---- Sync pending orders ----
-
 export async function syncPendingOrders(): Promise<number> {
   const pending = loadPending();
   let synced = 0;
@@ -259,4 +264,156 @@ export async function syncPendingOrders(): Promise<number> {
     }
   }
   return synced;
+}
+
+// ---- Kitchen sessions & claims ----
+
+export async function fetchKitchenSessions(sessionId: string): Promise<KitchenSession[]> {
+  const { data, error } = await supabase
+    .from('klj_kitchen_sessions')
+    .select('*')
+    .eq('session_id', sessionId);
+  if (error) throw error;
+  return (data || []) as KitchenSession[];
+}
+
+export async function upsertKitchenSession(
+  sessionId: string,
+  workerSessionId: string,
+  name: string,
+  currentOrderId?: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('klj_kitchen_sessions')
+    .upsert({
+      session_id: sessionId,
+      worker_session_id: workerSessionId,
+      name,
+      current_order_id: currentOrderId ?? null,
+      last_heartbeat_at: new Date().toISOString(),
+    }, { onConflict: 'worker_session_id' });
+  if (error) throw error;
+}
+
+export async function heartbeatKitchenSession(workerSessionId: string, currentOrderId?: string | null): Promise<void> {
+  const patch: Record<string, unknown> = { last_heartbeat_at: new Date().toISOString() };
+  if (currentOrderId !== undefined) patch.current_order_id = currentOrderId;
+  await supabase.from('klj_kitchen_sessions').update(patch).eq('worker_session_id', workerSessionId);
+}
+
+/**
+ * Claim een bestelling voor een keukenmedewerker (of neem over na bevestiging).
+ * Verwijdert eerst vorige claim van deze medewerker op andere bestellingen.
+ * Geeft { ok: false, claimedBy } terug als een andere actieve medewerker de bestelling al claimde.
+ */
+export async function claimOrder(
+  sessionId: string,
+  orderId: string,
+  workerSessionId: string,
+  name: string,
+  force: boolean,
+): Promise<{ ok: boolean; claimedBy?: string }> {
+  const now = new Date().toISOString();
+
+  // 1) Vorige bestelling van deze medewerker vrijgeven
+  await supabase
+    .from('klj_orders')
+    .update({ kitchen_claimed_by: null, kitchen_claimed_session_id: null, kitchen_claimed_at: null, updated_at: now })
+    .eq('kitchen_claimed_session_id', workerSessionId)
+    .neq('id', orderId);
+
+  // 2) Controleren of reeds geclaimd door een andere actieve medewerker
+  if (!force) {
+    const { data: existing } = await supabase
+      .from('klj_orders')
+      .select('kitchen_claimed_by, kitchen_claimed_session_id')
+      .eq('id', orderId)
+      .maybeSingle();
+    if (existing?.kitchen_claimed_session_id && existing.kitchen_claimed_session_id !== workerSessionId) {
+      const { data: ks } = await supabase
+        .from('klj_kitchen_sessions')
+        .select('last_heartbeat_at, name')
+        .eq('worker_session_id', existing.kitchen_claimed_session_id)
+        .maybeSingle();
+      if (ks) {
+        const age = Date.now() - new Date(ks.last_heartbeat_at).getTime();
+        if (age < 15000) {
+          return { ok: false, claimedBy: ks.name ?? 'andere keukenmedewerker' };
+        }
+      }
+    }
+  }
+
+  // 3) Claim zetten
+  const { error } = await supabase
+    .from('klj_orders')
+    .update({ kitchen_claimed_by: name, kitchen_claimed_session_id: workerSessionId, kitchen_claimed_at: now, updated_at: now })
+    .eq('id', orderId);
+  if (error) throw error;
+
+  // current_order_id op sessie zetten
+  await supabase
+    .from('klj_kitchen_sessions')
+    .update({ current_order_id: orderId, last_heartbeat_at: now })
+    .eq('worker_session_id', workerSessionId);
+
+  return { ok: true };
+}
+
+/**
+ * Geef de claim van een keukenmedewerker vrij (zonder de bestelling aan te raken).
+ */
+export async function releaseClaim(workerSessionId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await supabase
+    .from('klj_orders')
+    .update({ kitchen_claimed_by: null, kitchen_claimed_session_id: null, kitchen_claimed_at: null, updated_at: now })
+    .eq('kitchen_claimed_session_id', workerSessionId);
+  await supabase
+    .from('klj_kitchen_sessions')
+    .update({ current_order_id: null })
+    .eq('worker_session_id', workerSessionId);
+}
+
+/**
+ * Verwijder een keukensessie + vrijgeven claim (bij verlaten scherm).
+ */
+export async function removeKitchenSession(workerSessionId: string): Promise<void> {
+  await releaseClaim(workerSessionId);
+  await supabase
+    .from('klj_kitchen_sessions')
+    .delete()
+    .eq('worker_session_id', workerSessionId);
+}
+
+/**
+ * Ruim verlopen claims op (server-side back-up tegen spookclaims).
+ */
+export async function cleanupStaleClaims(): Promise<void> {
+  await supabase.rpc('klj_cleanup_stale_kitchen_claims', { max_age_seconds: 15 });
+}
+
+// ---- Print queue (keuken -> host PC) ----
+
+export async function requestPrint(sessionId: string, orderId: string, orderNum: number, requestedBy: string): Promise<void> {
+  await supabase.from('klj_print_queue').insert({
+    session_id: sessionId,
+    order_id: orderId,
+    order_num: orderNum,
+    requested_by: requestedBy,
+  });
+}
+
+export async function fetchPrintQueue(sessionId: string): Promise<{ id: string; order_id: string; order_num: number; requested_by: string }[]> {
+  const { data, error } = await supabase
+    .from('klj_print_queue')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as any;
+}
+
+export async function deletePrintJob(id: string): Promise<void> {
+  await supabase.from('klj_print_queue').delete().eq('id', id);
 }

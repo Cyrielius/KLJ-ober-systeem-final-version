@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { LogOut, Plus, Search, History, BarChart3, ArrowLeft, MoreVertical } from 'lucide-react';
+import { LogOut, Plus, Search, History, BarChart3, ArrowLeft, MoreVertical, AlertTriangle, User } from 'lucide-react';
 import type { Session, Product, Order, OrderItem, WorkflowMode } from '../lib/types';
 import { fetchProducts, fetchOrders, createOrder, updateOrderStatus, updateOrder } from '../lib/db';
 import { OrderCard, type TimerThresholds } from '../components/OrderCard';
@@ -39,7 +39,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
   const [moreOpen, setMoreOpen] = useState(false);
   const [q, setQ] = useState('');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const toggleExpanded = (id: string) => setExpandedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const [skipConfirm, setSkipConfirm] = useState<Order | null>(null);
+  const toggleExpanded = (id: string) => setExpandedIds((s) => { const n = new Set(s); if (n.has(id)) { n.delete(id); } else { n.add(id); } return n; });
 
   async function refresh() {
     try {
@@ -66,8 +67,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
     orders.filter((o) => o.status === 'pending').sort((a, b) => a.created_at.localeCompare(b.created_at)),
     [orders]);
   const readyOrders = useMemo(() =>
-    orders.filter((o) => o.status === 'done').sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')),
-    [orders]);
+    workflowMode === '1-step' ? [] : orders.filter((o) => o.status === 'done').sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')),
+    [orders, workflowMode]);
   const completedOrders = useMemo(() =>
     orders.filter((o) => o.status === 'completed').sort((a, b) =>
       (b.picked_up_at || b.updated_at).localeCompare(a.picked_up_at || a.updated_at)),
@@ -80,12 +81,34 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
     refresh();
   }
 
-  // Waiter can ALWAYS advance an order to completed — even if kitchen forgot to mark done
-  async function handleAdvance(o: Order) {
+  // Waiter can ALWAYS advance an order — even if kitchen forgot to mark done (noodoplossing).
+  // But if the kitchen hasn't finished yet (status pending), show a clear skip-warning first.
+  function handleAdvance(o: Order) {
+    const next = nextStatus(o.status, workflowMode);
+    if (next === null) return;
+    if (o.status === 'pending') {
+      setSkipConfirm(o);
+      return;
+    }
+    void doAdvance(o);
+  }
+
+  async function doAdvance(o: Order) {
     const next = nextStatus(o.status, workflowMode);
     if (next === null) return;
     await updateOrderStatus(o.id, next, undefined, session.id);
     push(`#${o.num} → ${statusLabel(next, workflowMode)}`, 'success');
+    refresh();
+  }
+
+  async function confirmSkip() {
+    if (!skipConfirm) return;
+    const next = nextStatus(skipConfirm.status, workflowMode);
+    if (next) {
+      await updateOrderStatus(skipConfirm.id, next, undefined, session.id);
+      push(`#${skipConfirm.num} overgeslagen naar ${statusLabel(next, workflowMode)}`, 'info');
+    }
+    setSkipConfirm(null);
     refresh();
   }
 
@@ -158,7 +181,8 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
       <main className="flex-1 max-w-5xl mx-auto w-full p-3 pb-24">
         {view === 'main' && (
           <div className="grid md:grid-cols-3 gap-3">
-            {/* Ready — top priority, ober can complete */}
+            {/* Ready — top priority, ober can complete (Mode 2 only) */}
+            {workflowMode !== '1-step' && (
             <section>
               <h2 className="section-title mb-2 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400" /> {readyLabel} ({readyOrders.length})
@@ -182,6 +206,7 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
                 {readyOrders.length === 0 && <p className="text-white/30 text-xs">Niets klaar om af te halen.</p>}
               </div>
             </section>
+            )}
 
             {/* Received / Sent */}
             <section>
@@ -190,19 +215,24 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
               </h2>
               <div className="flex flex-col gap-2">
                 {receivedOrders.map((o) => (
-                  <OrderCard
-                    key={o.id}
-                    order={o}
-                    workflowMode={workflowMode}
-                    timers={timers}
-                    expanded={expandedIds.has(o.id)}
-                    onToggle={() => toggleExpanded(o.id)}
-                    onAdvance={handleAdvance}
-                    onEdit={setEditOrder}
-                    onRevert={handleRevert}
-                    onDetails={setDetailsOrder}
-                    showRevert
+                  <div key={o.id} className="flex flex-col gap-1">
+                    {o.kitchen_claimed_by && (
+                      <span className="badge bg-sky-500/15 text-sky-400 self-start text-[10px]"><User size={9} /> Bezig: {o.kitchen_claimed_by}</span>
+                    )}
+                    <OrderCard
+                      key={o.id}
+                      order={o}
+                      workflowMode={workflowMode}
+                      timers={timers}
+                      expanded={expandedIds.has(o.id)}
+                      onToggle={() => toggleExpanded(o.id)}
+                      onAdvance={handleAdvance}
+                      onEdit={setEditOrder}
+                      onRevert={handleRevert}
+                      onDetails={setDetailsOrder}
+                      showRevert
                   />
+                  </div>
                 ))}
                 {receivedOrders.length === 0 && <p className="text-white/30 text-xs">Geen bestellingen wachten.</p>}
               </div>
@@ -301,6 +331,27 @@ export function WaiterDashboard({ session, waiterName, onLeave, connStatus }: Pr
       {editOrder && <EditOrderModal order={editOrder} products={products} vakjeValue={session.vakje_value} onClose={() => setEditOrder(null)} onSave={handleEditSave} onCancel={(o) => { setEditOrder(null); setCancelOrder(o); }} />}
       {cancelOrder && <CancelModal order={cancelOrder} onClose={() => setCancelOrder(null)} onConfirm={(reason) => handleCancel(cancelOrder, reason)} />}
       {detailsOrder && <DetailsModal order={detailsOrder} vakjeValue={session.vakje_value} onClose={() => setDetailsOrder(null)} />}
+
+      {/* Keuken-overslaan waarschuwing */}
+      {skipConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="card w-full max-w-md p-6 animate-pop">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center"><AlertTriangle size={28} /></div>
+            </div>
+            <h3 className="text-lg font-bold text-white text-center mb-2">Keuken overslaan?</h3>
+            <p className="text-white/60 text-sm text-center mb-6">
+              De keuken heeft deze bestelling nog niet afgerond.
+              <br />Ben je zeker dat je deze stap wilt overslaan?
+              <br /><span className="text-white/40 text-xs">Bestelling #{skipConfirm.num} (tafel {skipConfirm.table_name}) → {statusLabel(nextStatus(skipConfirm.status, workflowMode)!, workflowMode)}</span>
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setSkipConfirm(null)} className="btn-ghost flex-1 py-3 text-sm">Annuleren</button>
+              <button onClick={confirmSkip} className="btn-warn flex-1 py-3 text-sm">Ja, overslaan</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

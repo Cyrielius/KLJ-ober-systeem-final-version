@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Plus, RotateCw, Loader2 } from 'lucide-react';
 import { createSession, getSessionByCode } from '../lib/db';
+import { unlockAudio } from '../lib/utils';
 import type { Session } from '../lib/types';
 
 interface Props {
@@ -17,6 +18,7 @@ export function HostEntry({ onBack, onHostSession }: Props) {
   const [err, setErr] = useState('');
 
   async function startNew() {
+    unlockAudio();
     if (!eventName.trim()) return setErr('Vul een evenementnaam in.');
     setBusy(true); setErr('');
     try {
@@ -27,6 +29,7 @@ export function HostEntry({ onBack, onHostSession }: Props) {
   }
 
   async function resume() {
+    unlockAudio();
     if (!code.trim() || !pin.trim()) return setErr('Vul sessiecode en PIN in.');
     setBusy(true); setErr('');
     try {

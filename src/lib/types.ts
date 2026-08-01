@@ -18,6 +18,7 @@ export interface Session {
   workflow_mode: WorkflowMode;
   sound_type: SoundType;
   sound_url?: string | null;
+  logo_url?: string | null;
   created_at: string;
 }
 
@@ -69,6 +70,9 @@ export interface Order {
   completed_at?: string | null;
   picked_up_at?: string | null;
   made_at?: string | null;
+  kitchen_claimed_by?: string | null;
+  kitchen_claimed_session_id?: string | null;
+  kitchen_claimed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,5 +84,15 @@ export interface OrderEvent {
   event_type: string;
   waiter?: string | null;
   detail?: string | null;
+  created_at: string;
+}
+
+export interface KitchenSession {
+  id: string;
+  session_id: string;
+  worker_session_id: string;
+  name: string;
+  current_order_id: string | null;
+  last_heartbeat_at: string;
   created_at: string;
 }

@@ -23,7 +23,7 @@ export function NewOrder({ products, vakjeValue, waiter, onBack, onSubmit }: Pro
   const [cartBarHeight, setCartBarHeight] = useState(0);
 
   // Hidden products are excluded entirely; unavailable products show grayed out
-  const visible = products.filter((p) => p.availability !== 'hidden' && (p.availability || (p.available ? 'available' : 'unavailable')) !== 'hidden');
+  const visible = products.filter((p) => (p.availability || (p.available ? 'available' : 'unavailable')) !== 'hidden');
   const filtered = query.trim()
     ? visible.filter((p) =>
         p.name.toLowerCase().includes(query.trim().toLowerCase()) ||

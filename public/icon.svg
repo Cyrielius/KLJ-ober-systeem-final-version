@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0b0f14"/>
+  <text x="256" y="200" font-family="Arial, sans-serif" font-size="120" font-weight="900" fill="#10b981" text-anchor="middle" letter-spacing="-4">KLJ</text>
+  <text x="256" y="270" font-family="Arial, sans-serif" font-size="32" font-weight="600" fill="#d1d5db" text-anchor="middle" letter-spacing="2">BESTEL</text>
+  <rect x="156" y="310" width="200" height="6" rx="3" fill="#10b981" opacity="0.6"/>
+  <g transform="translate(196, 350)">
+    <rect x="0" y="0" width="120" height="80" rx="10" fill="none" stroke="#d1d5db" stroke-width="4"/>
+    <rect x="20" y="20" width="80" height="8" rx="4" fill="#d1d5db" opacity="0.5"/>
+    <rect x="20" y="36" width="60" height="8" rx="4" fill="#d1d5db" opacity="0.4"/>
+    <rect x="20" y="52" width="70" height="8" rx="4" fill="#d1d5db" opacity="0.3"/>
+  </g>
+</svg>

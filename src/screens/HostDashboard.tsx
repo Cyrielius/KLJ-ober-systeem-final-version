@@ -3,7 +3,7 @@ import { createRoot as ReactDOMCreateRoot } from 'react-dom/client';
 import { LogOut, ListOrdered, UtensilsCrossed, BarChart3, Settings, Plus, Volume2, VolumeX, Download, Upload, ArrowUp, ArrowDown, Users, Smartphone, Flame } from 'lucide-react';
 import type { Session, Product, Order, OrderItem, WorkflowMode } from '../lib/types';
 import { fmtEUR, waitMinutes, statusLabel, advanceLabel, nextStatus, prevStatus, playNotificationSound } from '../lib/utils';
-import { fetchProducts, fetchOrders, updateOrderStatus, updateOrder, upsertProduct, deleteProduct, reorderProducts, updateSession } from '../lib/db';
+import { fetchProducts, fetchOrders, updateOrderStatus, updateOrder, upsertProduct, deleteProduct, reorderProducts, updateSession, fetchPrintQueue, deletePrintJob } from '../lib/db';
 import { OrderCard, type TimerThresholds } from '../components/OrderCard';
 import { Stats } from '../components/Stats';
 import { Modal } from '../components/Modal';
@@ -14,6 +14,10 @@ import { ProductModal, SettingsModal, UsersModal } from '../components/AdminModa
 import { useToast } from '../components/Toast';
 import { StatusDot } from '../components/ui';
 import { supabase } from '../lib/supabase';
+import { connectUSBPrinter, connectSerialPrinter, connectDymoPrinter, disconnectPrinter, isPrinterConnected, isDymoConnected, isWebUSBSupported, isWebSerialSupported, printReceiptThermal, printQRCodes, onPrinterChange } from '../lib/printer';
+import { Printer, Usb, Cable, CheckCircle2, XCircle, Tag } from 'lucide-react';
+import { NotificationBell } from '../components/NotificationBell';
+import { showNotification } from '../lib/notifications';
 
 type Tab = 'orders' | 'products' | 'stats' | 'settings';
 type ConnStatus = 'online' | 'sync' | 'offline';
@@ -41,6 +45,11 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
   const [usersModal, setUsersModal] = useState(false);
   const [knownOrderIds, setKnownOrderIds] = useState<Set<string>>(new Set());
   const [currentSession, setCurrentSession] = useState(session);
+  const [printerConnected, setPrinterConnected] = useState(isPrinterConnected());
+  const [dymoConnected, setDymoConnected] = useState(isDymoConnected());
+
+  // Houd de UI in sync met de printer-verbindingsstatus.
+  useEffect(() => onPrinterChange((ok) => { setPrinterConnected(ok); setDymoConnected(isDymoConnected()); }), []);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const toggleExpanded = (id: string) => setExpandedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
@@ -67,7 +76,12 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
         if (fresh.length > 0 && prev.length > 0) {
           if (sound) playNotificationSound(currentSession.sound_type ?? 'beep', currentSession.sound_url);
           push(`${fresh.length} nieuwe bestelling(en)`, 'success');
-          if (currentSession.auto_print !== false) fresh.forEach((o) => autoPrintReceipt(o));
+          const firstNum = fresh[0].num;
+          void showNotification(
+            `Nieuwe bestelling #${firstNum}`,
+            fresh.length > 1 ? `${fresh.length} nieuwe bestellingen binnengekomen` : `Bestelling #${firstNum} van ${fresh[0].waiter} — tafel ${fresh[0].table_name}`,
+            'klj-new-order',
+          );
         }
         return next;
       });
@@ -77,10 +91,23 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
   useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [currentSession.id]);
 
   useEffect(() => {
-    const ch = supabaseRealtime(currentSession.id, () => refresh());
+    const ch = supabaseRealtime(currentSession.id, () => refresh(), () => processPrintQueue());
     return () => { ch.unsubscribe(); };
     // eslint-disable-next-line
   }, [currentSession.id]);
+
+  async function processPrintQueue() {
+    try {
+      const jobs = await fetchPrintQueue(currentSession.id);
+      for (const job of jobs) {
+        const { data: order } = await supabase.from('klj_orders').select('*').eq('id', job.order_id).maybeSingle();
+        if (order) {
+          autoPrintReceipt(order as unknown as Order);
+        }
+        await deletePrintJob(job.id);
+      }
+    } catch { /* ignore */ }
+  }
 
   // Forgotten order alerts
   useEffect(() => {
@@ -172,18 +199,32 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
     push('Instellingen opgeslagen', 'success');
   }
 
-  function printReceipt(o: Order) {
-    setPrintOrder(o);
-    setTimeout(() => {
-      const el = document.getElementById('receipt');
-      if (el) {
-        const w = window.open('', '_blank', 'width=320,height=600');
-        if (w) { w.document.write(el.outerHTML); w.document.close(); w.focus(); w.print(); }
-      }
-    }, 100);
+  async function printReceipt(o: Order) {
+    setPrintOrder(null);
+    await printReceiptThermal(o, currentSession.vakje_value, currentSession.logo_url);
+    push(`Bon #${o.num} afgedrukt`, 'success');
   }
 
-  function autoPrintReceipt(o: Order) {
+  function handlePrintQRCodes() {
+    printQRCodes([
+      { url: `${joinUrl}&role=waiter`, title: 'Ober', desc: 'Scan om als ober te verbinden' },
+      { url: `${joinUrl}&role=kitchen`, title: 'Keuken', desc: 'Scan om als keuken te verbinden' },
+    ], currentSession.logo_url);
+  }
+
+  async function autoPrintReceipt(o: Order) {
+    // Thermische printer: stuur ESC/POS bytes direct naar de printer.
+    // Werkt volledig automatisch — geen knop, geen venster, geen "enter".
+    if (isPrinterConnected()) {
+      try {
+        await printReceiptThermal(o, currentSession.vakje_value, currentSession.logo_url);
+        push(`Bon #${o.num} afgedrukt`, 'success');
+        return;
+      } catch (err: any) {
+        push(`Printen mislukt: ${err?.message || 'onbekend'}`, 'error');
+      }
+    }
+    // Fallback: browser-printvenster (als er geen thermische printer verbonden is).
     const holder = document.createElement('div');
     holder.style.position = 'fixed';
     holder.style.left = '-9999px';
@@ -199,6 +240,40 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
       }
       setTimeout(() => { root.unmount(); holder.remove(); }, 1000);
     }, 150);
+  }
+
+  async function handleConnectUSB() {
+    try {
+      await connectUSBPrinter();
+      push('USB-printer verbonden', 'success');
+    } catch (e: any) {
+      push(`Verbinden mislukt: ${e?.message || 'onbekend'}`, 'error');
+    }
+  }
+
+  async function handleConnectDymo() {
+    try {
+      await connectDymoPrinter();
+      push('Dymo-labelprinter verbonden', 'success');
+    } catch (e: any) {
+      push(`Verbinden mislukt: ${e?.message || 'onbekend'}`, 'error');
+    }
+  }
+
+  async function handleConnectSerial() {
+    try {
+      await connectSerialPrinter();
+      push('Seriële printer verbonden', 'success');
+    } catch (e: any) {
+      push(`Verbinden mislukt: ${e?.message || 'onbekend'}`, 'error');
+    }
+  }
+
+  async function handleDisconnectPrinter() {
+    try {
+      await disconnectPrinter();
+      push('Printer losgekoppeld', 'info');
+    } catch { /* ignore */ }
   }
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
@@ -221,6 +296,7 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
           </div>
           <div className="flex items-center gap-1.5">
             <StatusDot status={connStatus} />
+            <NotificationBell compact onEnabled={() => push('Meldingen ingeschakeld', 'success')} />
             <button onClick={() => setSound((s) => !s)} className="btn-ghost p-1.5" title="Geluid">{sound ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
             <button onClick={() => setShowPin((s) => !s)} className="btn-ghost px-2 py-1.5 text-xs font-mono" title="Host PIN">{showPin ? currentSession.pin : '••••'}</button>
             <button onClick={() => setShowQr(true)} className="btn-ghost p-1.5" title="QR"><Plus size={16} /></button>
@@ -363,9 +439,49 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
 
         {tab === 'settings' && (
           <div className="flex flex-col gap-2 max-w-md">
+            {/* Printer-statuskaart */}
+            <div className="card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-semibold text-sm text-white flex items-center gap-2"><Printer size={14} /> Bonprinter</p>
+                {printerConnected ? (
+                  <span className="badge bg-emerald-500/15 text-emerald-400 flex items-center gap-1"><CheckCircle2 size={12} /> Verbonden</span>
+                ) : (
+                  <span className="badge bg-white/[0.06] text-white/50 flex items-center gap-1"><XCircle size={12} /> Niet verbonden</span>
+                )}
+              </div>
+              <p className="text-white/40 text-xs mb-2.5">
+                {printerConnected
+                  ? 'Printer verbonden. Bonnetjes worden automatisch afgedrukt wanneer de keuken een bestelling opent — zonder knop of pop-up.'
+                  : 'Verbind een thermische bonprinter (ESC/POS) of een Dymo-labelprinter. Eens verbonden print alles automatisch — geen pop-up, geen knop.'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {!printerConnected ? (
+                  <>
+                    {isWebUSBSupported() && (
+                      <button onClick={handleConnectUSB} className="btn-primary px-2.5 py-1.5 text-xs flex items-center gap-1.5"><Usb size={14} /> Thermische USB</button>
+                    )}
+                    {isWebSerialSupported() && (
+                      <button onClick={handleConnectSerial} className="btn-ghost px-2.5 py-1.5 text-xs flex items-center gap-1.5"><Cable size={14} /> Serieel</button>
+                    )}
+                    {isWebUSBSupported() && (
+                      <button onClick={handleConnectDymo} className="btn-ghost px-2.5 py-1.5 text-xs flex items-center gap-1.5"><Tag size={14} /> Dymo-labelprinter</button>
+                    )}
+                    {!isWebUSBSupported() && !isWebSerialSupported() && (
+                      <span className="text-white/30 text-xs">Deze browser ondersteunt geen directe printer-verbinding. Gebruik Chrome of Edge.</span>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    {dymoConnected && <span className="badge bg-sky-500/15 text-sky-400 flex items-center gap-1"><Tag size={10} /> Dymo</span>}
+                    <button onClick={handleDisconnectPrinter} className="btn-danger px-2.5 py-1.5 text-xs">Loskoppelen</button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <button onClick={() => setSettingsModal(true)} className="card-hover p-3 text-left">
               <p className="font-semibold text-sm text-white">Algemeen & timers</p>
-              <p className="text-white/40 text-xs">Evenementnaam, werkmodus, vakjes, timers, geluid, printer</p>
+              <p className="text-white/40 text-xs">Evenementnaam, werkmodus, vakjes, timers, geluid</p>
             </button>
             <button onClick={() => setProductModal({ open: true })} className="card-hover p-3 text-left">
               <p className="font-semibold text-sm text-white">Product toevoegen</p>
@@ -406,6 +522,9 @@ export function HostDashboard({ session, onLeave, connStatus }: Props) {
             <QRCode value={`${joinUrl}&role=kitchen`} size={180} />
             <p className="text-white/50 text-xs text-center">Scan om als keuken te verbinden met <span className="font-mono">{currentSession.code}</span>.</p>
           </div>
+          <button onClick={handlePrintQRCodes} className="btn-primary px-4 py-2.5 text-sm flex items-center gap-2 w-full justify-center">
+            <Printer size={16} /> QR-codes afdrukken
+          </button>
         </div>
       </Modal>
     </div>
@@ -446,12 +565,13 @@ async function importProducts(e: React.ChangeEvent<HTMLInputElement>, sessionId:
   e.target.value = '';
 }
 
-function supabaseRealtime(sessionId: string, onChange: () => void) {
+function supabaseRealtime(sessionId: string, onChange: () => void, onPrintJob: () => void) {
   const ch = supabase
     .channel(`klj-host-${sessionId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'klj_orders', filter: `session_id=eq.${sessionId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'klj_products', filter: `session_id=eq.${sessionId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'klj_sessions', filter: `id=eq.${sessionId}` }, onChange)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'klj_print_queue', filter: `session_id=eq.${sessionId}` }, onPrintJob)
     .subscribe();
   return ch;
 }

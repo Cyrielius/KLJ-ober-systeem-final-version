@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal } from './Modal';
-import { Plus, Trash2, Loader2, ArrowUp, ArrowDown, Printer, Volume2, Users, Palette, Clock, Workflow, Upload } from 'lucide-react';
+import { Plus, Trash2, Loader2, ArrowUp, ArrowDown, Printer, Volume2, Users, Palette, Clock, Workflow, Upload, ImageIcon } from 'lucide-react';
 import type { Product, Session, ProductAvailability, WorkflowMode, SoundType } from '../lib/types';
 import { fmtEUR, playNotificationSound } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -132,6 +132,7 @@ interface SettingsModalProps {
     workflow_mode: WorkflowMode;
     sound_type: SoundType;
     sound_url?: string | null;
+    logo_url?: string | null;
   }) => Promise<void>;
   onToggleSound: () => void;
 }
@@ -147,7 +148,26 @@ export function SettingsModal({ session, sound, onClose, onSave, onToggleSound }
   const [workflowMode, setWorkflowMode] = useState<WorkflowMode>(session.workflow_mode ?? '2-step');
   const [soundType, setSoundType] = useState<SoundType>(session.sound_type ?? 'beep');
   const [soundUrl, setSoundUrl] = useState<string | null>(session.sound_url ?? null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(session.logo_url ?? null);
   const [busy, setBusy] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function uploadLogo(file: File) {
+    setLogoBusy(true); setErr('');
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const path = `${session.id}/logo.${ext}`;
+      const { error: upErr } = await supabase.storage.from('klj-logos').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from('klj-logos').getPublicUrl(path);
+      setLogoUrl(urlData.publicUrl);
+    } catch (e: any) {
+      setErr('Logo upload mislukt: ' + (e?.message || 'onbekende fout'));
+    } finally {
+      setLogoBusy(false);
+    }
+  }
 
   async function uploadSound(file: File) {
     setBusy(true);
@@ -180,6 +200,7 @@ export function SettingsModal({ session, sound, onClose, onSave, onToggleSound }
         workflow_mode: workflowMode,
         sound_type: soundType,
         sound_url: soundUrl,
+        logo_url: logoUrl,
       });
     } finally { setBusy(false); }
   }
@@ -236,6 +257,31 @@ export function SettingsModal({ session, sound, onClose, onSave, onToggleSound }
             <div><label className="label">Rood</label><input className="input mt-1" type="number" min="0" value={tr} onChange={(e) => setTr(e.target.value)} /></div>
             <div><label className="label">Kritiek</label><input className="input mt-1" type="number" min="0" value={tc} onChange={(e) => setTc(e.target.value)} /></div>
           </div>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <p className="section-title flex items-center gap-1"><ImageIcon size={12} /> KLJ Logo</p>
+          <p className="text-white/40 text-xs">Upload het KLJ-logo. Het verschijnt bovenaan op elke geprinte bon en op de QR-prints.</p>
+          <div className="flex items-center gap-3 flex-wrap">
+            {logoUrl && (
+              <div className="w-20 h-20 rounded-md bg-white p-1 flex items-center justify-center flex-none">
+                <img src={logoUrl} alt="logo" className="max-w-full max-h-full object-contain" />
+              </div>
+            )}
+            <label className="btn-ghost px-3 py-2 text-sm cursor-pointer flex items-center gap-2 w-fit">
+              {logoBusy ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Logo kiezen
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }}
+              />
+            </label>
+            {logoUrl && (
+              <button onClick={() => setLogoUrl(null)} className="btn-ghost px-2 py-1.5 text-xs text-red-400">Verwijderen</button>
+            )}
+          </div>
+          {logoUrl && <p className="text-emerald-400 text-xs">Logo ingesteld</p>}
         </section>
 
         <section className="flex flex-col gap-2">

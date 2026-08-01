@@ -1,0 +1,1 @@
+ALTER TABLE klj_sessions ADD COLUMN IF NOT EXISTS auto_print boolean NOT NULL DEFAULT true;

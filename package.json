@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "@thermal-label/labelwriter-web": "^0.6.4",
     "@types/qrcode-generator": "^0.0.16",
     "lucide-react": "^0.344.0",
     "qrcode-generator": "^2.0.4",
